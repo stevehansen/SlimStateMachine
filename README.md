@@ -1,0 +1,176 @@
+# Simple C# State Machine Library
+
+A lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state.
+
+## Features
+
+*   **Generic:** Define state machines for any entity (`TEntity`) and its status enum (`TEnum`).
+*   **Fluent Configuration:** Use a builder pattern to define the initial state and allowed transitions.
+*   **Static Access:** Interact with the state machine using static methods (`StateMachine<TEntity, TEnum>.CanTransition(...)`, etc.).
+*   **Cached Configuration:** State machine definitions are cached for performance after the initial configuration.
+*   **Transition Information:** Query possible transitions from the current state or any given state.
+*   **Pre-conditions:** Define conditions (`Func<TEntity, bool>`) that must be met for a transition to occur.
+*   **Post-conditions (Actions):** Define actions (`Action<TEntity>`) to be executed *after* a successful transition (before the state property is updated).
+*   **Automatic State Update:** The `TryTransition` method automatically updates the entity's status property upon successful transition.
+*   **Mermaid Graph Generation:** Generate a [Mermaid.js](https://mermaid.js.org/) graph definition string to visualize the state machine, including pre-condition descriptions.
+*   **Thread-Safe:** Configuration is thread-safe. Runtime access (checking/performing transitions) assumes the entity instance is handled appropriately by the calling code (e.g., not mutated concurrently during a transition check).
+
+## Installation
+
+*(Currently, you would include the `StateMachineLib` project directly in your solution or compile it into a DLL.)*
+
+If this were a NuGet package:
+`Install-Package YourNamespace.StateMachineLib`
+
+## Usage
+
+### 1. Define Your Entity and Enum
+
+```csharp
+// Example: Invoice Management
+public enum InvoiceStatus
+{
+    Draft,
+    Sent,
+    Paid,
+    Cancelled
+}
+
+public class Invoice
+{
+    public int Id { get; set; }
+    public InvoiceStatus Status { get; set; } // The state property
+    public decimal TotalAmount { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal RemainingAmount => TotalAmount - AmountPaid;
+    public string? Notes { get; set; }
+
+    // You might initialize the status in the constructor or rely on the state machine's initial state
+    public Invoice()
+    {
+        // Status defaults to 'Draft' (enum default) which matches our example initial state
+    }
+}
+```
+
+### 2. Configure the State Machine
+
+This should typically be done once during application startup (e.g., in `Program.cs` or a static constructor).
+
+```csharp
+using StateMachineLib;
+
+// --- Configuration (Do this once at startup) ---
+StateMachine<Invoice, InvoiceStatus>.Configure(
+    // 1. Specify the property holding the state
+    invoice => invoice.Status,
+
+    // 2. Use the builder to define the state machine rules
+    builder =>
+    {
+        // 2a. Set the initial state for new entities (if not set explicitly)
+        builder.SetInitialState(InvoiceStatus.Draft);
+
+        // 2b. Define allowed transitions
+        builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+
+        // 2c. Transition with a Pre-condition
+        builder.AllowTransition(
+            InvoiceStatus.Sent,
+            InvoiceStatus.Paid,
+            preCondition: inv => inv.RemainingAmount <= 0, // Func<Invoice, bool>
+            preConditionExpression: "Remaining <= 0"       // String for Mermaid graph
+        );
+
+        // 2d. Transition with a Post-condition (Action)
+        builder.AllowTransition(
+            InvoiceStatus.Draft,
+            InvoiceStatus.Cancelled,
+            postAction: inv => inv.Notes = "Cancelled while in Draft." // Action<Invoice>
+        );
+
+        // 2e. Transition with both Pre- and Post-conditions
+        builder.AllowTransition(
+            InvoiceStatus.Sent,
+            InvoiceStatus.Cancelled,
+            preCondition: inv => inv.RemainingAmount > 0,   // Can only cancel if not fully paid
+            preConditionExpression: "Remaining > 0",
+            postAction: inv => inv.Notes = "Cancelled after sending (partially paid)."
+        );
+    }
+);
+// --- End Configuration ---
+```
+
+### 3. Interact with the State Machine
+
+```csharp
+// Create an entity instance
+var myInvoice = new Invoice { Id = 101, TotalAmount = 500, AmountPaid = 0 };
+// Initial state is implicitly Draft (enum default), matching configured InitialState
+
+// Check if a transition is possible
+bool canSend = StateMachine<Invoice, InvoiceStatus>.CanTransition(myInvoice, InvoiceStatus.Sent); // true
+bool canPay = StateMachine<Invoice, InvoiceStatus>.CanTransition(myInvoice, InvoiceStatus.Paid);   // false (Remaining > 0)
+
+Console.WriteLine($"Can send invoice {myInvoice.Id}? {canSend}");
+Console.WriteLine($"Can pay invoice {myInvoice.Id}? {canPay}");
+
+// Get possible next states
+var possibleStates = StateMachine<Invoice, InvoiceStatus>.GetPossibleTransitions(myInvoice);
+// possibleStates will contain [Sent, Cancelled] for the initial Draft state in this config
+
+Console.WriteLine($"Possible next states for invoice {myInvoice.Id}: {string.Join(", ", possibleStates)}");
+
+// Attempt a transition
+bool transitionSucceeded = StateMachine<Invoice, InvoiceStatus>.TryTransition(myInvoice, InvoiceStatus.Sent);
+
+if (transitionSucceeded)
+{
+    Console.WriteLine($"Invoice {myInvoice.Id} transitioned to: {myInvoice.Status}"); // Status is now Sent
+}
+
+// Now try to pay - still fails precondition
+transitionSucceeded = StateMachine<Invoice, InvoiceStatus>.TryTransition(myInvoice, InvoiceStatus.Paid);
+Console.WriteLine($"Tried paying unpaid invoice. Succeeded? {transitionSucceeded}. Status: {myInvoice.Status}"); // false, Status remains Sent
+
+// Simulate payment
+myInvoice.AmountPaid = 500;
+
+// Try paying again - now succeeds
+canPay = StateMachine<Invoice, InvoiceStatus>.CanTransition(myInvoice, InvoiceStatus.Paid); // true
+transitionSucceeded = StateMachine<Invoice, InvoiceStatus>.TryTransition(myInvoice, InvoiceStatus.Paid);
+Console.WriteLine($"Tried paying fully paid invoice. Succeeded? {transitionSucceeded}. Status: {myInvoice.Status}"); // true, Status is now Paid
+
+// Try cancelling - fails precondition (Remaining <= 0)
+transitionSucceeded = StateMachine<Invoice, InvoiceStatus>.TryTransition(myInvoice, InvoiceStatus.Cancelled);
+Console.WriteLine($"Tried cancelling paid invoice. Succeeded? {transitionSucceeded}. Status: {myInvoice.Status}"); // false, Status remains Paid
+Console.WriteLine($"Notes: {myInvoice.Notes}"); // Post-action didn't run
+```
+
+### 4. Generate Mermaid Graph
+
+Get a string representation of the state machine for visualization.
+
+```csharp
+string mermaidGraph = StateMachine<Invoice, InvoiceStatus>.GenerateMermaidGraph();
+Console.WriteLine("\n--- Mermaid Graph ---");
+Console.WriteLine(mermaidGraph);
+```
+
+You can paste the output into tools or Markdown environments that support Mermaid (like GitLab, GitHub (in some contexts), Obsidian, online editors):
+
+```mermaid
+graph TD
+    [*] --> Draft
+    Draft --> Sent
+    Sent -- "Remaining <= 0" --> Paid
+    Draft --> Cancelled
+    Sent -- "Remaining > 0" --> Cancelled
+```
+
+## Error Handling
+
+*   `InvalidOperationException` is thrown if you try to use the state machine before calling `Configure` or if you call `Configure` more than once for the same `TEntity`/`TEnum` pair.
+*   `StateMachineException` is thrown for configuration errors (e.g., missing initial state) or if a `PostAction` throws an exception during `TryTransition`.
+*   `ArgumentException` / `ArgumentNullException` may be thrown during configuration if invalid parameters (like the property accessor) are provided.
