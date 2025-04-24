@@ -1,7 +1,7 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
 
-namespace StateMachineLib.Internal
+namespace SlimStateMachine.Internal
 {
     /// <summary>
     /// Holds the complete configuration for a specific state machine type. (Internal)

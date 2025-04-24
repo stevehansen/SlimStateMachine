@@ -1,4 +1,4 @@
-﻿namespace StateMachineLib.Tests
+﻿namespace SlimStateMachine.Tests
 {
     [TestClass]
     public class InvoiceStateMachineTests

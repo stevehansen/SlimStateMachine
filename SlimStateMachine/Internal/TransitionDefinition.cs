@@ -1,4 +1,4 @@
-﻿namespace StateMachineLib.Internal
+﻿namespace SlimStateMachine.Internal
 {
     /// <summary>
     /// Defines a single transition between states. (Internal)

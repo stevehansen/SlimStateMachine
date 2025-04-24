@@ -1,7 +1,7 @@
 ﻿using System.Linq.Expressions;
-using StateMachineLib.Internal; // Assuming TransitionDefinition/Configuration are internal
+using SlimStateMachine.Internal; // Assuming TransitionDefinition/Configuration are internal
 
-namespace StateMachineLib
+namespace SlimStateMachine
 {
     /// <summary>
     /// Fluent builder for configuring a state machine.

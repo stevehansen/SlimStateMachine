@@ -1,11 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35919.96 d17.13
+VisualStudioVersion = 17.13.35919.96
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StateMachineLib", "StateMachineLib\StateMachineLib.csproj", "{80E28DD7-0403-4638-A19A-ACE35D48CFDD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlimStateMachine", "SlimStateMachine\SlimStateMachine.csproj", "{80E28DD7-0403-4638-A19A-ACE35D48CFDD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StateMachineLib.Tests", "StateMachineLib.Tests\StateMachineLib.Tests.csproj", "{23E2BA19-F63B-4C6B-B317-04550EF5AD45}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SlimStateMachine.Tests", "SlimStateMachine.Tests\SlimStateMachine.Tests.csproj", "{23E2BA19-F63B-4C6B-B317-04550EF5AD45}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject

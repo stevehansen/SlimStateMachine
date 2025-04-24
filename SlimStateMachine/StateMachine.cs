@@ -2,11 +2,11 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text;
-using StateMachineLib.Internal;
+using SlimStateMachine.Internal;
 
-[assembly: InternalsVisibleTo("StateMachineLib.Tests")]
+[assembly: InternalsVisibleTo("SlimStateMachine.Tests")]
 
-namespace StateMachineLib
+namespace SlimStateMachine
 {
     /// <summary>
     /// Provides static methods for defining and interacting with state machines

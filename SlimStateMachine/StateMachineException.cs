@@ -1,4 +1,4 @@
-﻿namespace StateMachineLib
+﻿namespace SlimStateMachine
 {
     /// <summary>
     /// Represents errors that occur during state machine operations.

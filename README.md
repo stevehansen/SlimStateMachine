@@ -1,4 +1,4 @@
-# StateMachineLib
+# SlimStateMachine
 
 A lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state.
 
@@ -20,13 +20,13 @@ A lightweight C# library for defining and managing state machines based on an en
 Install the package via NuGet Package Manager:
 
 ```
-Install-Package StateMachineLib
+Install-Package SlimStateMachine
 ```
 
 Or using .NET CLI:
 
 ```
-dotnet add package StateMachineLib
+dotnet add package SlimStateMachine
 ```
 
 ## Supported Platforms
@@ -71,7 +71,7 @@ public class Invoice
 This should typically be done once during application startup (e.g., in `Program.cs` or a static constructor).
 
 ```csharp
-using StateMachineLib;
+using SlimStateMachine;
 
 // --- Configuration (Do this once at startup) ---
 StateMachine<Invoice, InvoiceStatus>.Configure(
@@ -184,7 +184,7 @@ graph TD
 
 ## Integration with ASP.NET Core and Domain-Driven Design
 
-StateMachineLib works well with ASP.NET Core applications and domain-driven design approaches:
+SlimStateMachine works well with ASP.NET Core applications and domain-driven design approaches:
 
 ```csharp
 // In your domain model

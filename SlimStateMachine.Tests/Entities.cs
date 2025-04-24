@@ -1,4 +1,4 @@
-﻿namespace StateMachineLib.Tests;
+﻿namespace SlimStateMachine.Tests;
 
 public enum InvoiceStatus
 {
