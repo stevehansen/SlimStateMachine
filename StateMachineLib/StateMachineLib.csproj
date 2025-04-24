@@ -1,10 +1,30 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net9.0;net8.0;netstandard2.0</TargetFrameworks>
 		<LangVersion>13</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		
+		<!-- NuGet Package Metadata -->
+		<PackageId>StateMachineLib</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>stevehansen</Authors>
+		<Description>A lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state.</Description>
+		<PackageTags>state-machine;fsm;workflow;transition;enum;domain-model</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/stevehansen/StateMachineLib</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/stevehansen/StateMachineLib</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		
+		<!-- XML Documentation -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);CS1591</NoWarn> <!-- Suppress XML missing documentation warnings -->
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-# Simple C# State Machine Library
+# StateMachineLib
 
 A lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state.
 
@@ -17,10 +17,23 @@ A lightweight C# library for defining and managing state machines based on an en
 
 ## Installation
 
-*(Currently, you would include the `StateMachineLib` project directly in your solution or compile it into a DLL.)*
+Install the package via NuGet Package Manager:
 
-If this were a NuGet package:
-`Install-Package YourNamespace.StateMachineLib`
+```
+Install-Package StateMachineLib
+```
+
+Or using .NET CLI:
+
+```
+dotnet add package StateMachineLib
+```
+
+## Supported Platforms
+
+- .NET 9.0
+- .NET 8.0
+- .NET Standard 2.0
 
 ## Usage
 
@@ -158,7 +171,7 @@ Console.WriteLine("\n--- Mermaid Graph ---");
 Console.WriteLine(mermaidGraph);
 ```
 
-You can paste the output into tools or Markdown environments that support Mermaid (like GitLab, GitHub (in some contexts), Obsidian, online editors):
+You can paste the output into tools or Markdown environments that support Mermaid (like GitLab, GitHub, Obsidian, online editors):
 
 ```mermaid
 graph TD
@@ -169,8 +182,58 @@ graph TD
     Sent -- "Remaining > 0" --> Cancelled
 ```
 
+## Integration with ASP.NET Core and Domain-Driven Design
+
+StateMachineLib works well with ASP.NET Core applications and domain-driven design approaches:
+
+```csharp
+// In your domain model
+public class Order
+{
+    public Guid Id { get; private set; }
+    public OrderStatus Status { get; private set; }
+    
+    // Other domain properties...
+    
+    // Encapsulated state transition methods
+    public bool ProcessOrder()
+    {
+        return StateMachine<Order, OrderStatus>.TryTransition(this, OrderStatus.Processing);
+    }
+    
+    public bool ShipOrder()
+    {
+        return StateMachine<Order, OrderStatus>.TryTransition(this, OrderStatus.Shipped);
+    }
+}
+
+// In your startup code
+StateMachine<Order, OrderStatus>.Configure(
+    order => order.Status,
+    builder => {
+        builder.SetInitialState(OrderStatus.Created);
+        builder.AllowTransition(OrderStatus.Created, OrderStatus.Processing, 
+            preCondition: o => o.Items.Count > 0,
+            preConditionExpression: "Has items");
+        // More transitions...
+    }
+);
+```
+
 ## Error Handling
 
 *   `InvalidOperationException` is thrown if you try to use the state machine before calling `Configure` or if you call `Configure` more than once for the same `TEntity`/`TEnum` pair.
 *   `StateMachineException` is thrown for configuration errors (e.g., missing initial state) or if a `PostAction` throws an exception during `TryTransition`.
 *   `ArgumentException` / `ArgumentNullException` may be thrown during configuration if invalid parameters (like the property accessor) are provided.
+
+## Version History
+
+### 1.0.0 (Initial Release)
+- Basic state machine functionality
+- Pre-conditions and post-action support
+- Mermaid graph generation
+- Thread-safe configuration
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
