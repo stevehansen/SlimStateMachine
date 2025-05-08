@@ -14,7 +14,7 @@ namespace SlimStateMachine
     /// </summary>
     /// <typeparam name="TEntity">The type of the entity being managed.</typeparam>
     /// <typeparam name="TEnum">The enum type representing the state (must be struct, Enum).</typeparam>
-    public static class StateMachine<TEntity, TEnum>
+    public static partial class StateMachine<TEntity, TEnum>
         where TEnum : struct, Enum // Ensure TEnum is an enum
     {
         // Cache for configurations. Key: Tuple(EntityType, EnumType) - though types are generic params here.

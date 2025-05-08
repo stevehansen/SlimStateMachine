@@ -174,7 +174,7 @@ Console.WriteLine("\n--- Mermaid Graph ---");
 Console.WriteLine(mermaidGraph);
 ```
 
-You can paste the output into tools or Markdown environments that support Mermaid (like GitLab, GitHub, Obsidian, online editors):
+You can paste the output into tools or Markdown environments that support Mermaid (like GitLab, GitHub, Obsidian, online editors https://mermaid.live/):
 
 ```mermaid
 graph TD
@@ -183,6 +183,46 @@ graph TD
     Sent -- "Remaining <= 0" --> Paid
     Draft --> Cancelled
     Sent -- "Remaining > 0" --> Cancelled
+```
+
+### 5. Generate D2 Graph
+
+Get a string representation of the state machine for visualization in D2 format.
+```csharp
+string d2Graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph();
+Console.WriteLine("\n--- D2 Graph ---");
+Console.WriteLine(d2Graph);
+```
+
+You can paste the output into tools or Markdown environments that support D2 (like Obsidian, online editors https://play.d2lang.com/):
+```d2
+# State Machine: Invoice - InvoiceStatus
+direction: down
+
+# Styles
+style {
+  fill: honeydew
+  stroke: limegreen
+  stroke-width: 2
+  font-size: 14
+  shadow: true
+}
+
+Start: {
+  shape: circle
+  style.fill: lightgreen
+  style.stroke: green
+  width: 40
+  height: 40
+}
+
+Start -> Draft
+
+# Transitions
+Draft -> Sent
+Sent -> Paid: Remaining <= 0
+Draft -> Cancelled
+Sent -> Cancelled: Remaining > 0
 ```
 
 ## Integration with ASP.NET Core and Domain-Driven Design
