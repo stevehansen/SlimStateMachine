@@ -271,6 +271,10 @@ StateMachine<Order, OrderStatus>.Configure(
 
 ## Version History
 
+### 1.1.0 (D2 Graph Support)
+- Added support for generating D2 graph format for state machine visualization.
+- Fixed minor bugs in Mermaid graph generation.
+
 ### 1.0.0 (Initial Release)
 - Basic state machine functionality
 - Pre-conditions and post-action support
