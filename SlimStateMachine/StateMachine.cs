@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent; // Using ConcurrentDictionary for thread safety
+using System.Collections.Concurrent; // Using ConcurrentDictionary for thread safety
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -196,7 +196,7 @@ namespace SlimStateMachine
             sb.AppendLine("graph TD"); // Top-Down graph
 
             // Add initial state marker
-            sb.AppendLine($"    [*] --> {config.InitialState}");
+            sb.AppendLine($"    Start((\u26aa)) --> {config.InitialState}");
 
             // Add all defined transitions
             var allTransitions = config.Transitions.Values.SelectMany(list => list).ToArray();

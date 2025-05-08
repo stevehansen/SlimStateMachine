@@ -178,7 +178,7 @@ You can paste the output into tools or Markdown environments that support Mermai
 
 ```mermaid
 graph TD
-    [*] --> Draft
+    Start((⚪)) --> Draft
     Draft --> Sent
     Sent -- "Remaining <= 0" --> Paid
     Draft --> Cancelled
