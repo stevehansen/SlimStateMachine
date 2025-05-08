@@ -1,5 +1,8 @@
 # SlimStateMachine
 
+[![NuGet](https://img.shields.io/nuget/v/SlimStateMachine.svg)](https://www.nuget.org/packages/SlimStateMachine/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state.
 
 ## Features
