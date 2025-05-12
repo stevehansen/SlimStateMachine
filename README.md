@@ -1,5 +1,7 @@
 # SlimStateMachine
 
+![icon](icon.png)
+
 [![NuGet](https://img.shields.io/nuget/v/SlimStateMachine.svg)](https://www.nuget.org/packages/SlimStateMachine/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
