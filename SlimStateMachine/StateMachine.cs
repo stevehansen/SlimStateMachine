@@ -21,8 +21,11 @@ namespace SlimStateMachine
         // Using object as value and casting to avoid static generics issues across different TEntity/TEnum.
         private static readonly ConcurrentDictionary<(Type, Type), object> _configurations = new();
 
-        // TODO: Use Lock in .NET 9 for better performance
-        private static readonly object _configureLock = new object();
+#if NET9_0_OR_GREATER
+        private static readonly Lock _configureLock = new();
+#else
+        private static readonly object _configureLock = new();
+#endif
 
         /// <summary>
         /// Configures the state machine for the given TEntity and TEnum types.
