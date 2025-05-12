@@ -306,5 +306,122 @@
             Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Cancelled));
             Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Draft));
         }
+
+        [TestMethod]
+        public void TryTransitionAny_FirstTransitionValid_TransitionsAndReturnsTrue()
+        {
+            ConfigureInvoiceStateMachine(false); // No conditions for simplicity
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [InvoiceStatus.Sent, InvoiceStatus.Paid, InvoiceStatus.Cancelled], out var actualState);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status);
+            Assert.AreEqual(InvoiceStatus.Sent, actualState);
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_SecondTransitionValid_TransitionsAndReturnsTrue()
+        {
+            ConfigureInvoiceStateMachine(false); // No conditions for simplicity
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            // Draft -> Paid is invalid, Draft -> Sent is valid
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [InvoiceStatus.Paid, InvoiceStatus.Sent], out var actualState);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status);
+            Assert.AreEqual(InvoiceStatus.Sent, actualState);
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_NoTransitionsValid_ReturnsFalseAndStateUnchanged()
+        {
+            ConfigureInvoiceStateMachine(false); // No conditions for simplicity
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Paid };
+
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [InvoiceStatus.Sent, InvoiceStatus.Draft], out var actualState);
+
+            Assert.IsFalse(result);
+            Assert.AreEqual(InvoiceStatus.Paid, invoice.Status);
+            Assert.AreEqual(default, actualState);
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_WithPreConditions_TransitionsToFirstValid()
+        {
+            ConfigureInvoiceStateMachine();
+            // Sent -> Paid requires RemainingAmount == 0, Sent -> Cancelled requires !RequiresApproval
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent, TotalAmount = 100, AmountPaid = 100, RequiresApproval = false };
+
+            // Both transitions are valid, should take Paid first
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [InvoiceStatus.Paid, InvoiceStatus.Cancelled], out var actualState);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(InvoiceStatus.Paid, invoice.Status);
+            Assert.AreEqual(InvoiceStatus.Paid, actualState);
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_WithPreConditions_TransitionsToSecondIfFirstNotMet()
+        {
+            ConfigureInvoiceStateMachine();
+            // Sent -> Paid requires RemainingAmount == 0, Sent -> Cancelled requires !RequiresApproval
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent, TotalAmount = 100, AmountPaid = 50, RequiresApproval = false };
+
+            // Paid not allowed (Remaining > 0), Cancelled allowed (!RequiresApproval)
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [InvoiceStatus.Paid, InvoiceStatus.Cancelled], out var actualState);
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(InvoiceStatus.Cancelled, invoice.Status);
+            Assert.AreEqual(InvoiceStatus.Cancelled, actualState);
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_WithPreConditions_NoneMet_ReturnsFalse()
+        {
+            ConfigureInvoiceStateMachine();
+            // Sent -> Paid requires RemainingAmount == 0, Sent -> Cancelled requires !RequiresApproval
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent, TotalAmount = 100, AmountPaid = 50, RequiresApproval = true };
+
+            // Neither transition allowed
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [InvoiceStatus.Paid, InvoiceStatus.Cancelled], out var actualState);
+
+            Assert.IsFalse(result);
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status);
+            Assert.AreEqual(default, actualState);
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_EmptyTransitions_ReturnsFalse()
+        {
+            ConfigureInvoiceStateMachine(false); // No conditions for simplicity
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice, [], out var actualState);
+            Assert.IsFalse(result);
+            Assert.AreEqual(InvoiceStatus.Draft, invoice.Status);
+            Assert.AreEqual(default, actualState);
+        }
+
+
+        [TestMethod]
+        public void TryTransitionAny()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft, TotalAmount = 100 };
+
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice);
+            Assert.IsTrue(result);
+
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status); // First valid transition
+
+            // Update payment to allow transition to Paid
+            invoice.AmountPaid = 100;
+
+            result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice);
+            Assert.IsTrue(result);
+
+            Assert.AreEqual(InvoiceStatus.Paid, invoice.Status); // Next valid transition
+        }
     }
 }

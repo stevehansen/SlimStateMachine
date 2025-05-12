@@ -127,6 +127,11 @@ public static partial class StateMachine<TEntity, TEnum>
     {
         var config = GetConfiguration();
         var currentState = config.GetCurrentState(entity);
+        return TryTransition(config, entity, currentState, toState);
+    }
+
+    private static bool TryTransition(StateMachineConfiguration<TEntity, TEnum> config, TEntity entity, TEnum currentState, TEnum toState)
+    {
         var transition = config.FindTransition(currentState, toState);
 
         if (transition == null || !transition.IsPreConditionMet(entity))
@@ -146,6 +151,46 @@ public static partial class StateMachine<TEntity, TEnum>
             // Wrap exceptions from PostAction for clarity
             throw new StateMachineException($"Error executing post-action for transition from {currentState} to {toState}: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// Attempts to transition the entity to the first valid target state from its current state,
+    /// trying each of the provided possible target states in order. Returns true if any transition succeeds.
+    /// </summary>
+    /// <param name="entity">The entity instance.</param>
+    /// <param name="toStates">The ordered list of possible target states to try.</param>
+    /// <param name="successfulState">The state to which the transition was made, or default if none succeeded.</param>
+    /// <returns>True if a transition was successful, false otherwise.</returns>
+    public static bool TryTransitionAny(TEntity entity, IReadOnlyCollection<TEnum> toStates, out TEnum successfulState)
+    {
+        var config = GetConfiguration();
+        var currentState = config.GetCurrentState(entity);
+
+        foreach (var toState in toStates)
+        {
+            if (TryTransition(config, entity, currentState, toState))
+            {
+                successfulState = toState;
+                return true;
+            }
+        }
+
+        successfulState = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Attempts to transition the entity to the first valid target state from its current state.
+    /// Returns true if any transition succeeds.
+    /// </summary>
+    /// <param name="entity">The entity instance.</param>
+    /// <returns>True if a transition was successful, false otherwise.</returns>
+    public static bool TryTransitionAny(TEntity entity)
+    {
+        var config = GetConfiguration();
+        var currentState = config.GetCurrentState(entity);
+
+        return config.GetTransitionsFrom(currentState).Any(transition => TryTransition(config, entity, currentState, transition.ToState));
     }
 
     /// <summary>
