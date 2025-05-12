@@ -1,4 +1,5 @@
-﻿using System.Linq.Expressions;
+﻿using System.Collections.Frozen;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace SlimStateMachine.Internal;
@@ -13,19 +14,25 @@ internal class StateMachineConfiguration<TEntity, TEnum>
 {
     public TEnum InitialState { get; }
     // Key: FromState, Value: List of transitions originating from FromState
-    public IReadOnlyDictionary<TEnum, List<TransitionDefinition<TEntity, TEnum>>> Transitions { get; }
+    public FrozenDictionary<TEnum, List<TransitionDefinition<TEntity, TEnum>>> Transitions { get; }
+
+    /// <summary>
+    /// The set of final states (states with no outgoing transitions).
+    /// </summary>
+    public FrozenSet<TEnum> FinalStates { get; }
 
     private readonly Func<TEntity, TEnum> _stateGetter;
     private readonly Action<TEntity, TEnum> _stateSetter;
-    private readonly string _statusPropertyName;
 
     internal StateMachineConfiguration(
         TEnum initialState,
         Dictionary<TEnum, List<TransitionDefinition<TEntity, TEnum>>> transitions,
-        Expression<Func<TEntity, TEnum>> statusPropertyAccessor)
+        Expression<Func<TEntity, TEnum>> statusPropertyAccessor,
+        IEnumerable<TEnum> finalStates)
     {
         InitialState = initialState;
-        Transitions = transitions; // Consider making a ReadOnlyDict copy if builder mutates
+        Transitions = transitions.ToFrozenDictionary();
+        FinalStates = finalStates.ToFrozenSet();
 
         // Compile getter
         _stateGetter = statusPropertyAccessor.Compile();
@@ -36,11 +43,10 @@ internal class StateMachineConfiguration<TEntity, TEnum>
             throw new ArgumentException("The status property accessor must be a simple member expression (e.g., entity => entity.Status).", nameof(statusPropertyAccessor));
         }
 
-        _statusPropertyName = memberExpression.Member.Name;
         var propertyInfo = memberExpression.Member as PropertyInfo;
         if (propertyInfo == null || !propertyInfo.CanWrite)
         {
-            throw new ArgumentException($"The property '{_statusPropertyName}' must be writable.", nameof(statusPropertyAccessor));
+            throw new ArgumentException($"The property '{memberExpression.Member.Name}' must be writable.", nameof(statusPropertyAccessor));
         }
 
         var entityParam = statusPropertyAccessor.Parameters[0]; // entity
@@ -53,8 +59,6 @@ internal class StateMachineConfiguration<TEntity, TEnum>
     public TEnum GetCurrentState(TEntity entity) => _stateGetter(entity);
 
     public void SetState(TEntity entity, TEnum newState) => _stateSetter(entity, newState);
-
-    public string GetStatusPropertyName() => _statusPropertyName;
 
     public TransitionDefinition<TEntity, TEnum>? FindTransition(TEnum from, TEnum to)
     {

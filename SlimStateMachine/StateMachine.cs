@@ -178,6 +178,25 @@ public static partial class StateMachine<TEntity, TEnum>
     }
 
     /// <summary>
+    /// Returns true if the given state is a final state (i.e., has no outgoing transitions).
+    /// </summary>
+    public static bool IsFinalState(TEnum state)
+    {
+        var config = GetConfiguration();
+        return config.FinalStates.Contains(state);
+    }
+
+    /// <summary>
+    /// Returns true if the entity is currently in a final state (i.e., has no outgoing transitions).
+    /// </summary>
+    public static bool IsInFinalState(TEntity entity)
+    {
+        var config = GetConfiguration();
+        var currentState = config.GetCurrentState(entity);
+        return config.FinalStates.Contains(currentState);
+    }
+
+    /// <summary>
     /// Generates a Mermaid graph definition string representing the configured state machine.
     /// </summary>
     /// <returns>A string suitable for rendering with Mermaid.js (e.g., in Markdown).</returns>

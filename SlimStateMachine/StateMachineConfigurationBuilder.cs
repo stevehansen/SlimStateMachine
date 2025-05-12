@@ -98,10 +98,15 @@ public sealed class StateMachineConfigurationBuilder<TEntity, TEnum>
         if (!enumValues.Contains(_initialState.Value))
             throw new StateMachineException($"Initial state '{_initialState.Value}' is not a valid value of enum {typeof(TEnum).Name}.");
 
+        // --- Final states calculation ---
+        // A final state is any state that is never a 'fromState' in any transition (i.e., has no outgoing transitions)
+        var statesWithOutgoing = new HashSet<TEnum>(_transitions.Keys);
 
         return new(
             _initialState.Value,
             _transitions,
-            _statusPropertyAccessor);
+            _statusPropertyAccessor,
+            enumValues.Except(statesWithOutgoing)
+        );
     }
 }

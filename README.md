@@ -14,6 +14,7 @@ A lightweight C# library for defining and managing state machines based on an en
 *   **Static Access:** Interact with the state machine using static methods (`StateMachine<TEntity, TEnum>.CanTransition(...)`, etc.).
 *   **Cached Configuration:** State machine definitions are cached for performance after the initial configuration.
 *   **Transition Information:** Query possible transitions from the current state or any given state.
+*   **Final State Detection:** Check if a state is a final state (no outgoing transitions) or if an entity is currently in a final state.
 *   **Pre-conditions:** Define conditions (`Func<TEntity, bool>`) that must be met for a transition to occur.
 *   **Post-conditions (Actions):** Define actions (`Action<TEntity>`) to be executed *after* a successful transition (before the state property is updated).
 *   **Automatic State Update:** The `TryTransition` method automatically updates the entity's status property upon successful transition.

@@ -289,5 +289,22 @@
             // Ensure Draft node exists even without transitions
             Assert.IsTrue(graph.TrimEnd().EndsWith("Draft") || graph.Contains("Draft\n")); // Might be just the initial link or a separate node def
         }
+
+        [TestMethod]
+        public void CheckFinalStates()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Paid };
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.IsInFinalState(invoice));
+            invoice.Status = InvoiceStatus.Sent;
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.IsInFinalState(invoice));
+            invoice.Status = InvoiceStatus.Cancelled;
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.IsInFinalState(invoice));
+
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Paid));
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Sent));
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Cancelled));
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Draft));
+        }
     }
 }
