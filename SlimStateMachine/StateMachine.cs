@@ -183,9 +183,48 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <returns>A string suitable for rendering with Mermaid.js (e.g., in Markdown).</returns>
     public static string GenerateMermaidGraph()
     {
+        return GenerateMermaidGraph(entity: default, currentState: null);
+    }
+
+    /// <summary>
+    /// Generates a Mermaid graph definition string representing the configured state machine
+    /// with the current state of the provided entity highlighted.
+    /// </summary>
+    /// <param name="entity">The entity instance whose current state should be highlighted.</param>
+    /// <returns>A string suitable for rendering with Mermaid.js.</returns>
+    public static string GenerateMermaidGraph(TEntity entity)
+    {
+        return GenerateMermaidGraph(entity: entity, null);
+    }
+
+    /// <summary>
+    /// Generates a Mermaid graph definition string representing the configured state machine
+    /// with the specified state highlighted.
+    /// </summary>
+    /// <param name="currentState">The state to highlight.</param>
+    /// <returns>A string suitable for rendering with Mermaid.js.</returns>
+    public static string GenerateMermaidGraph(TEnum currentState)
+    {
+        return GenerateMermaidGraph(entity: default, currentState);
+    }
+
+    private static string GenerateMermaidGraph(TEntity? entity, TEnum? currentState)
+    {
         var config = GetConfiguration();
         var sb = new StringBuilder();
+
+        // If entity is provided but currentState is default, get the current state from the entity
+        if (entity is not null && currentState is null)
+            currentState = config.GetCurrentState(entity);
+
         sb.AppendLine("graph TD"); // Top-Down graph
+
+        // Add style for current state if specified
+        if (currentState is not null)
+        {
+            sb.AppendLine("    %% Styling for current state");
+            sb.AppendLine($"    style {currentState} fill:#ffffaa,stroke:#ffaa00,stroke-width:3px");
+        }
 
         // Add initial state marker
         sb.AppendLine($"    Start((\u26aa)) --> {config.InitialState}");

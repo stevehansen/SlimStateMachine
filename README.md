@@ -18,6 +18,7 @@ A lightweight C# library for defining and managing state machines based on an en
 *   **Post-conditions (Actions):** Define actions (`Action<TEntity>`) to be executed *after* a successful transition (before the state property is updated).
 *   **Automatic State Update:** The `TryTransition` method automatically updates the entity's status property upon successful transition.
 *   **Mermaid Graph Generation:** Generate a [Mermaid.js](https://mermaid.js.org/) graph definition string to visualize the state machine, including pre-condition descriptions.
+*   **D2 Graph Generation:** Generate a [D2](https://d2lang.org/) graph definition string to visualize the state machine, including pre-condition descriptions.
 *   **Thread-Safe:** Configuration is thread-safe. Runtime access (checking/performing transitions) assumes the entity instance is handled appropriately by the calling code (e.g., not mutated concurrently during a transition check).
 
 ## Installation
@@ -226,6 +227,14 @@ Sent -> Paid: Remaining <= 0
 Draft -> Cancelled
 Sent -> Cancelled: Remaining > 0
 ```
+
+### 6. Generate Diagram in Either Format
+
+You can also use the generic diagram generator to create diagrams in either format:
+
+string diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(format: "Mermaid");
+Console.WriteLine("\n--- Diagram ---");
+Console.WriteLine(diagram);
 
 ## Integration with ASP.NET Core and Domain-Driven Design
 
