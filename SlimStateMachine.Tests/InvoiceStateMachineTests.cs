@@ -262,7 +262,7 @@
 
             // Basic structural checks
             Assert.IsTrue(graph.StartsWith("graph TD"));
-            Assert.IsTrue(graph.Contains("[*] --> Draft")); // Initial state
+            Assert.IsTrue(graph.Contains("Start((⚪)) --> Draft")); // Initial state
             Assert.IsTrue(graph.Contains("Draft --> Sent")); // Simple transition
             Assert.IsTrue(graph.Contains("Sent -- \"Remaining == 0\" --> Paid")); // Transition with condition label
             Assert.IsTrue(graph.Contains("Sent -- \"!RequiresApproval\" --> Cancelled")); // Transition with condition label
@@ -285,10 +285,9 @@
             Console.WriteLine(graph);
 
             Assert.IsTrue(graph.StartsWith("graph TD"));
-            Assert.IsTrue(graph.Contains("[*] --> Draft"));
+            Assert.IsTrue(graph.Contains("Start((⚪)) --> Draft"));
             // Ensure Draft node exists even without transitions
             Assert.IsTrue(graph.TrimEnd().EndsWith("Draft") || graph.Contains("Draft\n")); // Might be just the initial link or a separate node def
         }
-
     }
 }
