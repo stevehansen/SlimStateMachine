@@ -177,7 +177,6 @@ public static partial class StateMachine<TEntity, TEnum>
             .Select(transition => transition.ToState);
     }
 
-
     /// <summary>
     /// Generates a Mermaid graph definition string representing the configured state machine.
     /// </summary>
@@ -206,7 +205,7 @@ public static partial class StateMachine<TEntity, TEnum>
                 if (!string.IsNullOrWhiteSpace(transition.PreConditionExpression))
                 {
                     // Escape quotes in the condition expression for the label
-                    string safeCondition = transition.PreConditionExpression.Replace("\"", "#quot;");
+                    var safeCondition = transition.PreConditionExpression.Replace("\"", "#quot;");
                     sb.AppendLine($"    {transition.FromState} -- \"{safeCondition}\" --> {transition.ToState}");
                 }
                 else
@@ -215,7 +214,6 @@ public static partial class StateMachine<TEntity, TEnum>
                 }
             }
         }
-
 
         // Optional: Add states that might only be initial or final states and have no explicit transitions listed
         //var allStatesMentioned = new HashSet<TEnum>(config.Transitions.Keys);
@@ -228,7 +226,6 @@ public static partial class StateMachine<TEntity, TEnum>
         //         sb.AppendLine($"    {state}"); // Ensure lone states are declared
         //     }
         // }
-
 
         return sb.ToString();
     }

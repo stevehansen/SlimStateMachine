@@ -31,7 +31,7 @@ internal class StateMachineConfiguration<TEntity, TEnum>
         _stateGetter = statusPropertyAccessor.Compile();
 
         // Compile setter
-        if (!(statusPropertyAccessor.Body is MemberExpression memberExpression))
+        if (statusPropertyAccessor.Body is not MemberExpression memberExpression)
         {
             throw new ArgumentException("The status property accessor must be a simple member expression (e.g., entity => entity.Status).", nameof(statusPropertyAccessor));
         }
@@ -72,6 +72,6 @@ internal class StateMachineConfiguration<TEntity, TEnum>
         {
             return possibleTransitions;
         }
-        return Enumerable.Empty<TransitionDefinition<TEntity, TEnum>>();
+        return [];
     }
 }

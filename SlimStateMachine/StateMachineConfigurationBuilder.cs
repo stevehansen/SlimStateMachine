@@ -1,5 +1,5 @@
 ﻿using System.Linq.Expressions;
-using SlimStateMachine.Internal; // Assuming TransitionDefinition/Configuration are internal
+using SlimStateMachine.Internal;
 
 namespace SlimStateMachine;
 
@@ -60,15 +60,13 @@ public sealed class StateMachineConfigurationBuilder<TEntity, TEnum>
 
         if (!_transitions.TryGetValue(fromState, out var list))
         {
-            list = new();
+            list = [];
             _transitions[fromState] = list;
         }
 
         // Prevent duplicate definitions for the exact same from/to pair? Or allow overriding? Let's prevent.
         if (list.Any(t => t.ToState.Equals(toState)))
-        {
             throw new InvalidOperationException($"A transition from {fromState} to {toState} is already defined.");
-        }
 
         list.Add(transition);
         return this;
