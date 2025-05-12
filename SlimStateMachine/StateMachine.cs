@@ -1,4 +1,3 @@
-using System.Collections.Concurrent; // Using ConcurrentDictionary for thread safety
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -17,15 +16,15 @@ namespace SlimStateMachine
     public static partial class StateMachine<TEntity, TEnum>
         where TEnum : struct, Enum // Ensure TEnum is an enum
     {
-        // Cache for configurations. Key: Tuple(EntityType, EnumType) - though types are generic params here.
-        // Using object as value and casting to avoid static generics issues across different TEntity/TEnum.
-        private static readonly ConcurrentDictionary<(Type, Type), object> _configurations = new();
+        private static StateMachineConfiguration<TEntity, TEnum>? _config;
 
+        // ReSharper disable StaticMemberInGenericType
 #if NET9_0_OR_GREATER
         private static readonly Lock _configureLock = new();
 #else
         private static readonly object _configureLock = new();
 #endif
+        // ReSharper restore StaticMemberInGenericType
 
         /// <summary>
         /// Configures the state machine for the given TEntity and TEnum types.
@@ -43,24 +42,17 @@ namespace SlimStateMachine
             if (statusPropertyAccessor == null) throw new ArgumentNullException(nameof(statusPropertyAccessor));
             if (configureAction == null) throw new ArgumentNullException(nameof(configureAction));
 
-            var key = (typeof(TEntity), typeof(TEnum));
-
             // Double-checked locking pattern for thread-safe initialization
-            if (!_configurations.ContainsKey(key))
+            if (_config is null)
             {
                 lock (_configureLock)
                 {
-                    if (!_configurations.ContainsKey(key))
+                    if (_config is null)
                     {
                         var builder = new StateMachineConfigurationBuilder<TEntity, TEnum>(statusPropertyAccessor);
                         configureAction(builder);
-                        var configuration = builder.Build(); // Build validates required settings like initial state
+                        _config = builder.Build(); // Build validates required settings like initial state
 
-                        if (!_configurations.TryAdd(key, configuration))
-                        {
-                            // This should ideally not happen due to the lock, but handle defensively
-                            throw new InvalidOperationException($"Concurrency error: Configuration for {typeof(TEntity).Name}/{typeof(TEnum).Name} was added unexpectedly.");
-                        }
                         return; // Exit after successful configuration
                     }
                 }
@@ -76,12 +68,10 @@ namespace SlimStateMachine
         /// <exception cref="InvalidOperationException">Thrown if the state machine is not configured.</exception>
         private static StateMachineConfiguration<TEntity, TEnum> GetConfiguration()
         {
-            var key = (typeof(TEntity), typeof(TEnum));
-            if (_configurations.TryGetValue(key, out var configObject) && configObject is StateMachineConfiguration<TEntity, TEnum> config)
-            {
-                return config;
-            }
-            throw new InvalidOperationException($"State machine for {typeof(TEntity).Name} with status {typeof(TEnum).Name} has not been configured. Call Configure() first.");
+            if (_config is null)
+                throw new InvalidOperationException($"State machine for {typeof(TEntity).Name} with status {typeof(TEnum).Name} has not been configured. Call Configure() first.");
+
+            return _config;
         }
 
         /// <summary>
@@ -250,8 +240,7 @@ namespace SlimStateMachine
         /// </summary>
         internal static void ClearConfiguration_TestOnly()
         {
-            var key = (typeof(TEntity), typeof(TEnum));
-            _configurations.TryRemove(key, out _);
+            _config = null; // Reset the configuration
         }
     }
 }

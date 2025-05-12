@@ -8,7 +8,7 @@ namespace SlimStateMachine
     /// </summary>
     /// <typeparam name="TEntity">The type of the entity being managed.</typeparam>
     /// <typeparam name="TEnum">The enum type representing the state.</typeparam>
-    public class StateMachineConfigurationBuilder<TEntity, TEnum>
+    public sealed class StateMachineConfigurationBuilder<TEntity, TEnum>
         where TEnum : struct, Enum
     {
         private TEnum? _initialState;
@@ -22,10 +22,8 @@ namespace SlimStateMachine
                 ?? throw new ArgumentNullException(nameof(statusPropertyAccessor));
 
             // Basic validation of the expression
-            if (!(statusPropertyAccessor.Body is MemberExpression memberExp && memberExp.Member is System.Reflection.PropertyInfo))
-            {
+            if (statusPropertyAccessor.Body is not MemberExpression { Member: System.Reflection.PropertyInfo })
                 throw new ArgumentException("Expression must be a simple property accessor (e.g., x => x.Status).", nameof(statusPropertyAccessor));
-            }
         }
 
         /// <summary>
@@ -62,7 +60,7 @@ namespace SlimStateMachine
 
             if (!_transitions.TryGetValue(fromState, out var list))
             {
-                list = new List<TransitionDefinition<TEntity, TEnum>>();
+                list = new();
                 _transitions[fromState] = list;
             }
 
@@ -82,32 +80,30 @@ namespace SlimStateMachine
         internal StateMachineConfiguration<TEntity, TEnum> Build()
         {
             if (_initialState == null)
-            {
                 throw new StateMachineException("Initial state must be configured using SetInitialState.");
-            }
 
             // Validate that all states used in transitions are valid enum values
             var allDefinedStates = _transitions.Keys
                 .Concat(_transitions.Values.SelectMany(list => list.Select(t => t.ToState)))
                 .Distinct();
-            var enumValues = Enum.GetValues(typeof(TEnum)).Cast<TEnum>().ToList();
+#if NET9_0_OR_GREATER
+            var enumValues = Enum.GetValues<TEnum>();
+#else
+            var enumValues = Enum.GetValues(typeof(TEnum)).Cast<TEnum>().ToArray();
+#endif
 
             foreach (var state in allDefinedStates)
             {
                 if (!enumValues.Contains(state))
-                {
                     throw new StateMachineException($"State '{state}' used in a transition is not a valid value of enum {typeof(TEnum).Name}.");
-                }
             }
             if (!enumValues.Contains(_initialState.Value))
-            {
                 throw new StateMachineException($"Initial state '{_initialState.Value}' is not a valid value of enum {typeof(TEnum).Name}.");
-            }
 
 
-            return new StateMachineConfiguration<TEntity, TEnum>(
+            return new(
                 _initialState.Value,
-                _transitions, // Pass the dictionary
+                _transitions,
                 _statusPropertyAccessor);
         }
     }
