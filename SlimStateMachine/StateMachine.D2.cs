@@ -113,8 +113,11 @@ public static partial class StateMachine<TEntity, TEnum>
             {
                 if (!string.IsNullOrWhiteSpace(transition.PreConditionExpression))
                 {
-                    // D2 uses a different label syntax than Mermaid
-                    sb.AppendLine($"{transition.FromState} -> {transition.ToState}: {transition.PreConditionExpression}");
+                    // Sanitize PreConditionExpression for D2 output
+                    var sanitizedExpression = transition.PreConditionExpression
+                                                .Replace("\\", "\\\\")
+                                                .Replace("\"", "\\\"");
+                    sb.AppendLine($"{transition.FromState} -> {transition.ToState}: \"{sanitizedExpression}\"");
                 }
                 else
                 {

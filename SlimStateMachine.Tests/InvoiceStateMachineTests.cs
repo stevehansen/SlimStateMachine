@@ -403,6 +403,41 @@
             Assert.AreEqual(default, actualState);
         }
 
+        [TestMethod]
+        public void GenerateD2Graph_OutputsCorrectFormat_WithSpecialCharactersInExpression()
+        {
+            StateMachine<Invoice, InvoiceStatus>.ClearConfiguration_TestOnly();
+
+            string problematicExpression = "inv.Details == \"A \\\"quoted\\\" string\" && inv.Amount > 0";
+            // Expected D2 sanitized output for the expression part:
+            // Original: inv.Details == "A \"quoted\" string" && inv.Amount > 0
+            // D2 Sanitize (replace \ with \\, then " with \", then wrap in "):
+            // "inv.Details == \"A \\\"quoted\\\" string\" && inv.Amount > 0"
+            // C# string literal for the above (for assertion):
+            string expectedSanitizedLabelContent = "\"inv.Details == \\\"A \\\\\\\"quoted\\\\\\\" string\\\" && inv.Amount > 0\"";
+
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(
+                        InvoiceStatus.Draft,
+                        InvoiceStatus.Sent,
+                        preConditionExpression: problematicExpression
+                    );
+                }
+            );
+
+            var d2Graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph();
+            Console.WriteLine(d2Graph); // For debugging test failures
+
+            string expectedD2TransitionLine = $"Draft -> Sent: {expectedSanitizedLabelContent}";
+
+            StringAssert.Contains(d2Graph, expectedD2TransitionLine, "The D2 graph output did not contain the correctly sanitized precondition expression.");
+        }
+
 
         [TestMethod]
         public void TryTransitionAny()
