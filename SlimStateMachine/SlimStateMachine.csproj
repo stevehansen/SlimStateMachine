@@ -8,7 +8,7 @@
 
 		<!-- NuGet Package Metadata -->
 		<PackageId>SlimStateMachine</PackageId>
-		<Version>1.2.0</Version>
+		<Version>1.3.0</Version>
 		<Authors>stevehansen</Authors>
 		<Description>A lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state.</Description>
 		<PackageTags>state-machine;fsm;workflow;transition;enum;domain-model</PackageTags>
