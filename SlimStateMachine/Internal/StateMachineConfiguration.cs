@@ -21,6 +21,16 @@ internal class StateMachineConfiguration<TEntity, TEnum>
     /// </summary>
     public FrozenSet<TEnum> FinalStates { get; }
 
+    /// <summary>
+    /// Actions to execute when entering a state.
+    /// </summary>
+    public FrozenDictionary<TEnum, Action<TEntity>> OnEntryActions { get; }
+
+    /// <summary>
+    /// Actions to execute when exiting a state.
+    /// </summary>
+    public FrozenDictionary<TEnum, Action<TEntity>> OnExitActions { get; }
+
     private readonly Func<TEntity, TEnum> _stateGetter;
     private readonly Action<TEntity, TEnum> _stateSetter;
 
@@ -28,11 +38,15 @@ internal class StateMachineConfiguration<TEntity, TEnum>
         TEnum initialState,
         Dictionary<TEnum, List<TransitionDefinition<TEntity, TEnum>>> transitions,
         Expression<Func<TEntity, TEnum>> statusPropertyAccessor,
-        IEnumerable<TEnum> finalStates)
+        IEnumerable<TEnum> finalStates,
+        Dictionary<TEnum, Action<TEntity>> onEntryActions,
+        Dictionary<TEnum, Action<TEntity>> onExitActions)
     {
         InitialState = initialState;
         Transitions = transitions.ToFrozenDictionary();
         FinalStates = finalStates.ToFrozenSet();
+        OnEntryActions = onEntryActions.ToFrozenDictionary();
+        OnExitActions = onExitActions.ToFrozenDictionary();
 
         // Compile getter
         _stateGetter = statusPropertyAccessor.Compile();
@@ -77,5 +91,21 @@ internal class StateMachineConfiguration<TEntity, TEnum>
             return possibleTransitions;
         }
         return [];
+    }
+
+    public void ExecuteOnExit(TEntity entity, TEnum state)
+    {
+        if (OnExitActions.TryGetValue(state, out var action))
+        {
+            action(entity);
+        }
+    }
+
+    public void ExecuteOnEntry(TEntity entity, TEnum state)
+    {
+        if (OnEntryActions.TryGetValue(state, out var action))
+        {
+            action(entity);
+        }
     }
 }

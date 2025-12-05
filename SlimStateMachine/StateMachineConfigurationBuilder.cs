@@ -13,6 +13,8 @@ public sealed class StateMachineConfigurationBuilder<TEntity, TEnum>
 {
     private TEnum? _initialState;
     private readonly Dictionary<TEnum, List<TransitionDefinition<TEntity, TEnum>>> _transitions = new();
+    private readonly Dictionary<TEnum, Action<TEntity>> _onEntryActions = new();
+    private readonly Dictionary<TEnum, Action<TEntity>> _onExitActions = new();
     private readonly Expression<Func<TEntity, TEnum>> _statusPropertyAccessor;
 
     // Internal constructor - creation managed by StateMachine.Configure
@@ -73,6 +75,40 @@ public sealed class StateMachineConfigurationBuilder<TEntity, TEnum>
     }
 
     /// <summary>
+    /// Registers an action to execute when entering a specific state.
+    /// The action is called after the state property is updated.
+    /// </summary>
+    /// <param name="state">The state being entered.</param>
+    /// <param name="action">The action to execute.</param>
+    public StateMachineConfigurationBuilder<TEntity, TEnum> OnEntry(TEnum state, Action<TEntity> action)
+    {
+        if (action == null) throw new ArgumentNullException(nameof(action));
+
+        if (_onEntryActions.ContainsKey(state))
+            throw new InvalidOperationException($"An OnEntry action for state {state} is already defined.");
+
+        _onEntryActions[state] = action;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers an action to execute when exiting a specific state.
+    /// The action is called before the state property is updated.
+    /// </summary>
+    /// <param name="state">The state being exited.</param>
+    /// <param name="action">The action to execute.</param>
+    public StateMachineConfigurationBuilder<TEntity, TEnum> OnExit(TEnum state, Action<TEntity> action)
+    {
+        if (action == null) throw new ArgumentNullException(nameof(action));
+
+        if (_onExitActions.ContainsKey(state))
+            throw new InvalidOperationException($"An OnExit action for state {state} is already defined.");
+
+        _onExitActions[state] = action;
+        return this;
+    }
+
+    /// <summary>
     /// Builds the configuration. Called internally by StateMachine.Configure.
     /// </summary>
     internal StateMachineConfiguration<TEntity, TEnum> Build()
@@ -106,7 +142,9 @@ public sealed class StateMachineConfigurationBuilder<TEntity, TEnum>
             _initialState.Value,
             _transitions,
             _statusPropertyAccessor,
-            enumValues.Except(statesWithOutgoing)
+            enumValues.Except(statesWithOutgoing),
+            _onEntryActions,
+            _onExitActions
         );
     }
 }
