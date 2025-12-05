@@ -168,6 +168,52 @@ Console.WriteLine($"Tried cancelling paid invoice. Succeeded? {transitionSucceed
 Console.WriteLine($"Notes: {myInvoice.Notes}"); // Post-action didn't run
 ```
 
+### 3a. Batch Transitions with TryTransitionAny
+
+Try multiple target states in order, transitioning to the first valid one:
+
+```csharp
+var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent, TotalAmount = 100, AmountPaid = 50 };
+
+// Try to transition to Paid first, then Cancelled - will transition to first valid target
+bool success = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(
+    invoice,
+    [InvoiceStatus.Paid, InvoiceStatus.Cancelled],
+    out var resultState);
+
+if (success)
+{
+    Console.WriteLine($"Transitioned to: {resultState}"); // Cancelled (Paid failed pre-condition)
+}
+
+// Or try any valid transition from current state
+var anotherInvoice = new Invoice { Id = 2, Status = InvoiceStatus.Draft };
+if (StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(anotherInvoice))
+{
+    Console.WriteLine($"Transitioned to: {anotherInvoice.Status}"); // First valid transition
+}
+```
+
+### 3b. Query Transitions and Final States
+
+```csharp
+// Get all defined transitions from a state (ignoring pre-conditions)
+var allFromDraft = StateMachine<Invoice, InvoiceStatus>.GetDefinedTransitions(InvoiceStatus.Draft);
+// Returns: [Sent, Cancelled]
+
+// Check if a specific transition is possible from any state (not just current)
+bool canSentToPaid = StateMachine<Invoice, InvoiceStatus>.CanTransition(
+    myInvoice,
+    fromState: InvoiceStatus.Sent,
+    toState: InvoiceStatus.Paid);
+
+// Check if a state is a final state (no outgoing transitions)
+bool isPaidFinal = StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStatus.Paid); // true
+
+// Check if an entity is currently in a final state
+bool isInFinal = StateMachine<Invoice, InvoiceStatus>.IsInFinalState(myInvoice);
+```
+
 ### 4. Generate Mermaid Graph
 
 Get a string representation of the state machine for visualization.
@@ -229,13 +275,35 @@ Draft -> Cancelled
 Sent -> Cancelled: Remaining > 0
 ```
 
+### 5a. Highlight Current State in Graphs
+
+Both Mermaid and D2 graphs support highlighting a specific state:
+
+```csharp
+var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+
+// Highlight based on entity's current state
+string mermaidWithHighlight = StateMachine<Invoice, InvoiceStatus>.GenerateMermaidGraph(invoice);
+string d2WithHighlight = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph(invoice);
+
+// Or highlight a specific state directly
+string mermaidHighlightPaid = StateMachine<Invoice, InvoiceStatus>.GenerateMermaidGraph(InvoiceStatus.Paid);
+string d2HighlightPaid = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph(InvoiceStatus.Paid);
+
+// D2 graphs can optionally exclude styling
+string d2NoStyles = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph(includeStyles: false);
+```
+
 ### 6. Generate Diagram in Either Format
 
 You can also use the generic diagram generator to create diagrams in either format:
 
-string diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(format: "Mermaid");
+```csharp
+string diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(
+    StateMachine<Invoice, InvoiceStatus>.DiagramType.Mermaid);
 Console.WriteLine("\n--- Diagram ---");
 Console.WriteLine(diagram);
+```
 
 ## Integration with ASP.NET Core and Domain-Driven Design
 
@@ -283,8 +351,17 @@ StateMachine<Order, OrderStatus>.Configure(
 
 ## Version History
 
+### 1.2.0 (Batch Transitions & Final States)
+- Added `TryTransitionAny` methods to attempt multiple transitions in order.
+- Added `IsFinalState` and `IsInFinalState` to detect terminal states.
+- Added `GetDefinedTransitions` to query transitions without entity context.
+- Added `CanTransition` overload with explicit `fromState` parameter.
+- Added state highlighting support in Mermaid and D2 graph generation.
+- Performance improvements using frozen collections internally.
+
 ### 1.1.0 (D2 Graph Support)
 - Added support for generating D2 graph format for state machine visualization.
+- Added `GenerateDiagram` with `DiagramType` enum for format selection.
 - Fixed minor bugs in Mermaid graph generation.
 
 ### 1.0.0 (Initial Release)
