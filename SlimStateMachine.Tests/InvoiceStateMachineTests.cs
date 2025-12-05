@@ -423,5 +423,347 @@
 
             Assert.AreEqual(InvoiceStatus.Paid, invoice.Status); // Next valid transition
         }
+
+        #region D2 Graph Generation Tests
+
+        [TestMethod]
+        public void GenerateD2Graph_OutputsCorrectFormat()
+        {
+            ConfigureInvoiceStateMachine();
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph();
+
+            Console.WriteLine(graph);
+
+            // Basic structural checks
+            Assert.IsTrue(graph.Contains("# State Machine: Invoice - InvoiceStatus"));
+            Assert.IsTrue(graph.Contains("direction: down"));
+            Assert.IsTrue(graph.Contains("Start -> Draft")); // Initial state
+            Assert.IsTrue(graph.Contains("Draft -> Sent")); // Simple transition
+            Assert.IsTrue(graph.Contains("Sent -> Paid: Remaining == 0")); // Transition with condition label
+            Assert.IsTrue(graph.Contains("Sent -> Cancelled: !RequiresApproval")); // Transition with condition label
+            Assert.IsTrue(graph.Contains("Draft -> Cancelled")); // Transition without condition
+            Assert.IsTrue(graph.Contains("Sent -> Draft")); // The transition back
+        }
+
+        [TestMethod]
+        public void GenerateD2Graph_IncludesStylesByDefault()
+        {
+            ConfigureInvoiceStateMachine();
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph();
+
+            Assert.IsTrue(graph.Contains("# Styles"));
+            Assert.IsTrue(graph.Contains("style {"));
+            Assert.IsTrue(graph.Contains("fill: honeydew"));
+            Assert.IsTrue(graph.Contains("Start: {"));
+            Assert.IsTrue(graph.Contains("shape: circle"));
+        }
+
+        [TestMethod]
+        public void GenerateD2Graph_WithoutStyles()
+        {
+            ConfigureInvoiceStateMachine();
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph(includeStyles: false);
+
+            Console.WriteLine(graph);
+
+            Assert.IsFalse(graph.Contains("# Styles"));
+            Assert.IsFalse(graph.Contains("style {"));
+            Assert.IsTrue(graph.Contains("Start -> Draft")); // Still has transitions
+        }
+
+        [TestMethod]
+        public void GenerateD2Graph_WithEntity_HighlightsCurrentState()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph(invoice);
+
+            Console.WriteLine(graph);
+
+            Assert.IsTrue(graph.Contains("# Current State: Sent"));
+            Assert.IsTrue(graph.Contains("Sent: {"));
+            Assert.IsTrue(graph.Contains("style.fill: lightyellow"));
+            Assert.IsTrue(graph.Contains("style.stroke: orange"));
+        }
+
+        [TestMethod]
+        public void GenerateD2Graph_WithExplicitState_HighlightsState()
+        {
+            ConfigureInvoiceStateMachine();
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph(InvoiceStatus.Paid);
+
+            Console.WriteLine(graph);
+
+            Assert.IsTrue(graph.Contains("# Current State: Paid"));
+            Assert.IsTrue(graph.Contains("Paid: {"));
+            Assert.IsTrue(graph.Contains("style.fill: lightyellow"));
+        }
+
+        [TestMethod]
+        public void GenerateD2Graph_HandlesNoTransitions()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+               invoice => invoice.Status,
+               builder => builder.SetInitialState(InvoiceStatus.Draft));
+
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph();
+            Console.WriteLine(graph);
+
+            Assert.IsTrue(graph.Contains("Start -> Draft"));
+            Assert.IsTrue(graph.Contains("Draft")); // Initial state shown even without transitions
+        }
+
+        #endregion
+
+        #region GenerateDiagram with DiagramType Tests
+
+        [TestMethod]
+        public void GenerateDiagram_Mermaid_ReturnsCorrectFormat()
+        {
+            ConfigureInvoiceStateMachine();
+            var diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(StateMachine<Invoice, InvoiceStatus>.DiagramType.Mermaid);
+
+            Assert.IsTrue(diagram.StartsWith("graph TD"));
+            Assert.IsTrue(diagram.Contains("Start((⚪)) --> Draft"));
+        }
+
+        [TestMethod]
+        public void GenerateDiagram_D2_ReturnsCorrectFormat()
+        {
+            ConfigureInvoiceStateMachine();
+            var diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(StateMachine<Invoice, InvoiceStatus>.DiagramType.D2);
+
+            Assert.IsTrue(diagram.Contains("# State Machine: Invoice - InvoiceStatus"));
+            Assert.IsTrue(diagram.Contains("Start -> Draft"));
+        }
+
+        [TestMethod]
+        public void GenerateDiagram_WithEntity_Mermaid()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+            var diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(StateMachine<Invoice, InvoiceStatus>.DiagramType.Mermaid, invoice);
+
+            Assert.IsTrue(diagram.Contains("style Sent fill:#ffffaa"));
+        }
+
+        [TestMethod]
+        public void GenerateDiagram_WithEntity_D2()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+            var diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(StateMachine<Invoice, InvoiceStatus>.DiagramType.D2, invoice);
+
+            Assert.IsTrue(diagram.Contains("# Current State: Sent"));
+        }
+
+        [TestMethod]
+        public void GenerateDiagram_WithExplicitState_Mermaid()
+        {
+            ConfigureInvoiceStateMachine();
+            var diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(StateMachine<Invoice, InvoiceStatus>.DiagramType.Mermaid, InvoiceStatus.Draft);
+
+            Assert.IsTrue(diagram.Contains("style Draft fill:#ffffaa"));
+        }
+
+        [TestMethod]
+        public void GenerateDiagram_WithExplicitState_D2()
+        {
+            ConfigureInvoiceStateMachine();
+            var diagram = StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(StateMachine<Invoice, InvoiceStatus>.DiagramType.D2, InvoiceStatus.Draft);
+
+            Assert.IsTrue(diagram.Contains("# Current State: Draft"));
+        }
+
+        #endregion
+
+        #region Mermaid Graph Highlighting Tests
+
+        [TestMethod]
+        public void GenerateMermaidGraph_WithEntity_HighlightsCurrentState()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateMermaidGraph(invoice);
+
+            Console.WriteLine(graph);
+
+            Assert.IsTrue(graph.Contains("%% Styling for current state"));
+            Assert.IsTrue(graph.Contains("style Sent fill:#ffffaa,stroke:#ffaa00,stroke-width:3px"));
+        }
+
+        [TestMethod]
+        public void GenerateMermaidGraph_WithExplicitState_HighlightsState()
+        {
+            ConfigureInvoiceStateMachine();
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateMermaidGraph(InvoiceStatus.Cancelled);
+
+            Console.WriteLine(graph);
+
+            Assert.IsTrue(graph.Contains("%% Styling for current state"));
+            Assert.IsTrue(graph.Contains("style Cancelled fill:#ffffaa,stroke:#ffaa00,stroke-width:3px"));
+        }
+
+        #endregion
+
+        #region CanTransition Overload Tests
+
+        [TestMethod]
+        public void CanTransition_WithExplicitFromState_ValidTransition_ReturnsTrue()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            // Check transition from Sent to Draft (even though entity is in Draft state)
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Sent, InvoiceStatus.Draft));
+        }
+
+        [TestMethod]
+        public void CanTransition_WithExplicitFromState_InvalidTransition_ReturnsFalse()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            // Draft -> Paid is not defined
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Draft, InvoiceStatus.Paid));
+        }
+
+        [TestMethod]
+        public void CanTransition_WithExplicitFromState_PreConditionNotMet_ReturnsFalse()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft, TotalAmount = 100, AmountPaid = 50 };
+
+            // Sent -> Paid requires RemainingAmount <= 0
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Sent, InvoiceStatus.Paid));
+        }
+
+        [TestMethod]
+        public void CanTransition_WithExplicitFromState_PreConditionMet_ReturnsTrue()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft, TotalAmount = 100, AmountPaid = 100 };
+
+            // Sent -> Paid requires RemainingAmount <= 0
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Sent, InvoiceStatus.Paid));
+        }
+
+        #endregion
+
+        #region Error Handling Tests
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentNullException))]
+        public void Configure_NullStatusPropertyAccessor_ThrowsArgumentNullException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                null!,
+                builder => builder.SetInitialState(InvoiceStatus.Draft));
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentNullException))]
+        public void Configure_NullConfigureAction_ThrowsArgumentNullException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                null!);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentException))]
+        public void Configure_InvalidExpression_NotProperty_ThrowsArgumentException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.GetHashCode() == 0 ? InvoiceStatus.Draft : InvoiceStatus.Sent,
+                builder => builder.SetInitialState(InvoiceStatus.Draft));
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(StateMachineException))]
+        public void TryTransition_PostActionThrows_WrapsInStateMachineException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(
+                        InvoiceStatus.Draft,
+                        InvoiceStatus.Sent,
+                        postAction: _ => throw new InvalidOperationException("Post action failed"));
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+        }
+
+        [TestMethod]
+        public void TryTransition_PostActionThrows_ExceptionContainsOriginalMessage()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(
+                        InvoiceStatus.Draft,
+                        InvoiceStatus.Sent,
+                        postAction: _ => throw new InvalidOperationException("Original error message"));
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            try
+            {
+                StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+                Assert.Fail("Expected StateMachineException");
+            }
+            catch (StateMachineException ex)
+            {
+                Assert.IsTrue(ex.Message.Contains("Draft"));
+                Assert.IsTrue(ex.Message.Contains("Sent"));
+                Assert.IsTrue(ex.Message.Contains("Original error message"));
+                Assert.IsInstanceOfType(ex.InnerException, typeof(InvalidOperationException));
+            }
+        }
+
+        #endregion
+
+        #region Configuration Validation Tests
+
+        [TestMethod]
+        [ExpectedException(typeof(InvalidOperationException))]
+        public void AllowTransition_DuplicateTransition_ThrowsInvalidOperationException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent); // Duplicate
+                });
+        }
+
+        [TestMethod]
+        public void AllowTransition_SameFromToDifferentTo_Allowed()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Cancelled);
+                });
+
+            var transitions = StateMachine<Invoice, InvoiceStatus>.GetDefinedTransitions(InvoiceStatus.Draft).ToList();
+            Assert.AreEqual(2, transitions.Count);
+            CollectionAssert.Contains(transitions, InvoiceStatus.Sent);
+            CollectionAssert.Contains(transitions, InvoiceStatus.Cancelled);
+        }
+
+        #endregion
     }
 }
