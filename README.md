@@ -17,6 +17,10 @@ A lightweight C# library for defining and managing state machines based on an en
 *   **Final State Detection:** Check if a state is a final state (no outgoing transitions) or if an entity is currently in a final state.
 *   **Pre-conditions:** Define conditions (`Func<TEntity, bool>`) that must be met for a transition to occur.
 *   **Post-conditions (Actions):** Define actions (`Action<TEntity>`) to be executed *after* a successful transition (before the state property is updated).
+*   **OnEntry/OnExit Actions:** Define actions to execute when entering or exiting specific states, regardless of which transition is taken.
+*   **Global Transition Event:** Subscribe to `OnTransition` event for logging, auditing, or custom behavior on any state change.
+*   **Transition Context:** Pass reason and metadata with transitions, available in the `OnTransition` event.
+*   **Force Transitions:** Bypass pre-conditions for administrative or recovery scenarios using `ForceTransition`.
 *   **Automatic State Update:** The `TryTransition` method automatically updates the entity's status property upon successful transition.
 *   **Mermaid Graph Generation:** Generate a [Mermaid.js](https://mermaid.js.org/) graph definition string to visualize the state machine, including pre-condition descriptions.
 *   **D2 Graph Generation:** Generate a [D2](https://d2lang.org/) graph definition string to visualize the state machine, including pre-condition descriptions.
@@ -117,6 +121,14 @@ StateMachine<Invoice, InvoiceStatus>.Configure(
             preConditionExpression: "Remaining > 0",
             postAction: inv => inv.Notes = "Cancelled after sending (partially paid)."
         );
+
+        // 2f. OnEntry action - executed when entering a state (after state change)
+        builder.OnEntry(InvoiceStatus.Paid, inv =>
+            Console.WriteLine($"Invoice {inv.Id} has been paid!"));
+
+        // 2g. OnExit action - executed when leaving a state (before state change)
+        builder.OnExit(InvoiceStatus.Draft, inv =>
+            Console.WriteLine($"Invoice {inv.Id} is no longer a draft."));
     }
 );
 // --- End Configuration ---
@@ -212,6 +224,59 @@ bool isPaidFinal = StateMachine<Invoice, InvoiceStatus>.IsFinalState(InvoiceStat
 
 // Check if an entity is currently in a final state
 bool isInFinal = StateMachine<Invoice, InvoiceStatus>.IsInFinalState(myInvoice);
+```
+
+### 3c. Global Transition Event
+
+Subscribe to be notified of all state transitions for logging, auditing, or metrics:
+
+```csharp
+// Subscribe to all transitions
+StateMachine<Invoice, InvoiceStatus>.OnTransition += context =>
+{
+    Console.WriteLine($"Invoice {context.Entity.Id} transitioned from {context.FromState} to {context.ToState}");
+
+    if (context.Reason != null)
+        Console.WriteLine($"  Reason: {context.Reason}");
+
+    if (context.WasForced)
+        Console.WriteLine($"  WARNING: Transition was forced!");
+
+    if (context.Metadata != null)
+        foreach (var kvp in context.Metadata)
+            Console.WriteLine($"  {kvp.Key}: {kvp.Value}");
+};
+
+// Transition with reason and metadata
+var metadata = new Dictionary<string, object> { ["UserId"] = 123, ["Source"] = "API" };
+StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent, "Customer requested", metadata);
+```
+
+### 3d. Force Transition
+
+Bypass pre-conditions for administrative or recovery scenarios:
+
+```csharp
+// Normal transition fails due to pre-condition
+bool success = StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Paid); // false
+
+// Force transition bypasses pre-conditions (but transition must still be defined)
+success = StateMachine<Invoice, InvoiceStatus>.ForceTransition(
+    invoice,
+    InvoiceStatus.Paid,
+    reason: "Admin override - payment confirmed manually");
+```
+
+### 3e. Query All States and Transitions
+
+```csharp
+// Get all states defined in the enum
+var allStates = StateMachine<Invoice, InvoiceStatus>.GetAllStates();
+// Returns: [Draft, Sent, Paid, Cancelled]
+
+// Get complete transition map
+var transitions = StateMachine<Invoice, InvoiceStatus>.GetAllTransitions();
+// Returns dictionary: { Draft: [Sent, Cancelled], Sent: [Paid, Cancelled, Draft], ... }
 ```
 
 ### 4. Generate Mermaid Graph
@@ -350,6 +415,14 @@ StateMachine<Order, OrderStatus>.Configure(
 *   `ArgumentException` / `ArgumentNullException` may be thrown during configuration if invalid parameters (like the property accessor) are provided.
 
 ## Version History
+
+### 1.3.0 (Events, Hooks & Force Transitions)
+- Added `OnEntry` and `OnExit` builder methods for state-specific actions.
+- Added `OnTransition` static event for global transition notifications.
+- Added `TransitionContext<TEntity, TEnum>` class with reason, metadata, and `WasForced` flag.
+- Added `ForceTransition` method to bypass pre-conditions.
+- Added `GetAllStates` and `GetAllTransitions` query methods.
+- Added `TryTransition` overload accepting reason and metadata parameters.
 
 ### 1.2.0 (Batch Transitions & Final States)
 - Added `TryTransitionAny` methods to attempt multiple transitions in order.
