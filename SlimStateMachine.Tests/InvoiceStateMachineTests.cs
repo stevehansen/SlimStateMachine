@@ -764,6 +764,367 @@
             CollectionAssert.Contains(transitions, InvoiceStatus.Cancelled);
         }
 
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentException))]
+        public void Configure_ReadOnlyProperty_ThrowsArgumentException()
+        {
+            StateMachine<ReadOnlyInvoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder => builder.SetInitialState(InvoiceStatus.Draft));
+        }
+
+        #endregion
+
+        #region Edge Case Tests
+
+        [TestMethod]
+        public void SelfLoop_TransitionToSameState_Works()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Draft); // Self-loop
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Draft));
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Draft));
+            Assert.AreEqual(InvoiceStatus.Draft, invoice.Status);
+        }
+
+        [TestMethod]
+        public void SelfLoop_WithPreCondition_RespectsCondition()
+        {
+            int transitionCount = 0;
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(
+                        InvoiceStatus.Draft,
+                        InvoiceStatus.Draft,
+                        preCondition: inv => inv.TotalAmount > 0,
+                        postAction: _ => transitionCount++);
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft, TotalAmount = 0 };
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Draft));
+            Assert.AreEqual(0, transitionCount);
+
+            invoice.TotalAmount = 100;
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Draft));
+            Assert.AreEqual(1, transitionCount);
+        }
+
+        [TestMethod]
+        public void NullEntity_CanTransition_ThrowsNullReferenceException()
+        {
+            ConfigureInvoiceStateMachine();
+            Invoice? invoice = null;
+
+            Assert.ThrowsException<NullReferenceException>(() =>
+                StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice!, InvoiceStatus.Sent));
+        }
+
+        [TestMethod]
+        public void NullEntity_TryTransition_ThrowsNullReferenceException()
+        {
+            ConfigureInvoiceStateMachine();
+            Invoice? invoice = null;
+
+            Assert.ThrowsException<NullReferenceException>(() =>
+                StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice!, InvoiceStatus.Sent));
+        }
+
+        [TestMethod]
+        public void NullEntity_GetPossibleTransitions_ThrowsNullReferenceException()
+        {
+            ConfigureInvoiceStateMachine();
+            Invoice? invoice = null;
+
+            Assert.ThrowsException<NullReferenceException>(() =>
+                StateMachine<Invoice, InvoiceStatus>.GetPossibleTransitions(invoice!).ToList());
+        }
+
+        [TestMethod]
+        public void NullEntity_IsInFinalState_ThrowsNullReferenceException()
+        {
+            ConfigureInvoiceStateMachine();
+            Invoice? invoice = null;
+
+            Assert.ThrowsException<NullReferenceException>(() =>
+                StateMachine<Invoice, InvoiceStatus>.IsInFinalState(invoice!));
+        }
+
+        [TestMethod]
+        public void GetPossibleTransitions_FromFinalState_ReturnsEmpty()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Paid }; // Paid is a final state
+
+            var transitions = StateMachine<Invoice, InvoiceStatus>.GetPossibleTransitions(invoice).ToList();
+
+            Assert.AreEqual(0, transitions.Count);
+        }
+
+        [TestMethod]
+        public void GetDefinedTransitions_FromFinalState_ReturnsEmpty()
+        {
+            ConfigureInvoiceStateMachine();
+
+            var transitions = StateMachine<Invoice, InvoiceStatus>.GetDefinedTransitions(InvoiceStatus.Paid).ToList();
+
+            Assert.AreEqual(0, transitions.Count);
+        }
+
+        [TestMethod]
+        public void TryTransition_AlreadyInTargetState_NoTransitionDefined_ReturnsFalse()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+
+            // No self-loop defined for Sent, so this should return false
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent));
+        }
+
+        #endregion
+
+        #region Multi-State Machine Isolation Tests
+
+        [TestMethod]
+        public void DifferentEntityTypes_HaveIndependentConfigurations()
+        {
+            // Configure Invoice state machine
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                });
+
+            // Configure Order state machine (different entity/enum)
+            StateMachine<Order, OrderStatus>.Configure(
+                order => order.Status,
+                builder =>
+                {
+                    builder.SetInitialState(OrderStatus.Created);
+                    builder.AllowTransition(OrderStatus.Created, OrderStatus.Processing);
+                    builder.AllowTransition(OrderStatus.Processing, OrderStatus.Shipped);
+                });
+
+            // Verify they have different initial states
+            Assert.AreEqual(InvoiceStatus.Draft, StateMachine<Invoice, InvoiceStatus>.InitialState);
+            Assert.AreEqual(OrderStatus.Created, StateMachine<Order, OrderStatus>.InitialState);
+
+            // Verify transitions work independently
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            var order = new Order { Id = 1, Status = OrderStatus.Created };
+
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent));
+            Assert.IsTrue(StateMachine<Order, OrderStatus>.TryTransition(order, OrderStatus.Processing));
+
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status);
+            Assert.AreEqual(OrderStatus.Processing, order.Status);
+
+            // Verify defined transitions are independent
+            var invoiceTransitions = StateMachine<Invoice, InvoiceStatus>.GetDefinedTransitions(InvoiceStatus.Draft).ToList();
+            var orderTransitions = StateMachine<Order, OrderStatus>.GetDefinedTransitions(OrderStatus.Created).ToList();
+
+            Assert.AreEqual(1, invoiceTransitions.Count);
+            Assert.AreEqual(1, orderTransitions.Count);
+        }
+
+        [TestCleanup]
+        public void TestCleanup()
+        {
+            // Clean up Order state machine after tests that use it
+            StateMachine<Order, OrderStatus>.ClearConfiguration_TestOnly();
+            StateMachine<ReadOnlyInvoice, InvoiceStatus>.ClearConfiguration_TestOnly();
+        }
+
+        #endregion
+
+        #region Builder Fluent API Tests
+
+        [TestMethod]
+        public void SetInitialState_ReturnsBuilder_ForChaining()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    var returnedBuilder = builder.SetInitialState(InvoiceStatus.Draft);
+                    Assert.AreSame(builder, returnedBuilder);
+                });
+        }
+
+        [TestMethod]
+        public void AllowTransition_ReturnsBuilder_ForChaining()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    var returnedBuilder = builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    Assert.AreSame(builder, returnedBuilder);
+                });
+        }
+
+        [TestMethod]
+        public void FluentChaining_ConfiguresCorrectly()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder => builder
+                    .SetInitialState(InvoiceStatus.Draft)
+                    .AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent)
+                    .AllowTransition(InvoiceStatus.Sent, InvoiceStatus.Paid)
+                    .AllowTransition(InvoiceStatus.Sent, InvoiceStatus.Cancelled));
+
+            Assert.AreEqual(InvoiceStatus.Draft, StateMachine<Invoice, InvoiceStatus>.InitialState);
+
+            var fromDraft = StateMachine<Invoice, InvoiceStatus>.GetDefinedTransitions(InvoiceStatus.Draft).ToList();
+            var fromSent = StateMachine<Invoice, InvoiceStatus>.GetDefinedTransitions(InvoiceStatus.Sent).ToList();
+
+            Assert.AreEqual(1, fromDraft.Count);
+            Assert.AreEqual(2, fromSent.Count);
+        }
+
+        #endregion
+
+        #region Diagram Edge Case Tests
+
+        [TestMethod]
+        public void GenerateDiagram_InvalidDiagramType_ThrowsArgumentException()
+        {
+            ConfigureInvoiceStateMachine();
+
+            var invalidType = (StateMachine<Invoice, InvoiceStatus>.DiagramType)999;
+
+            Assert.ThrowsException<ArgumentException>(() =>
+                StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(invalidType));
+        }
+
+        [TestMethod]
+        public void GenerateMermaidGraph_PreConditionWithQuotes_EscapesCorrectly()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(
+                        InvoiceStatus.Draft,
+                        InvoiceStatus.Sent,
+                        preCondition: inv => inv.CustomerName != null,
+                        preConditionExpression: "Name != \"empty\"");
+                });
+
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateMermaidGraph();
+            Console.WriteLine(graph);
+
+            // Quotes should be escaped as #quot;
+            Assert.IsTrue(graph.Contains("#quot;"));
+            Assert.IsFalse(graph.Contains("\"empty\"")); // Raw quotes should not appear in the label
+        }
+
+        [TestMethod]
+        public void GenerateD2Graph_PreConditionWithSpecialChars_IncludedAsIs()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(
+                        InvoiceStatus.Draft,
+                        InvoiceStatus.Sent,
+                        preCondition: inv => inv.TotalAmount > 0,
+                        preConditionExpression: "Amount > 0 && Valid");
+                });
+
+            var graph = StateMachine<Invoice, InvoiceStatus>.GenerateD2Graph();
+            Console.WriteLine(graph);
+
+            Assert.IsTrue(graph.Contains("Amount > 0 && Valid"));
+        }
+
+        #endregion
+
+        #region State Property Edge Case Tests
+
+        [TestMethod]
+        public void EntityState_DoesNotMatchInitialState_TransitionsFromActualState()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    builder.AllowTransition(InvoiceStatus.Sent, InvoiceStatus.Paid);
+                });
+
+            // Entity starts in Sent (not the configured initial state Draft)
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent };
+
+            // Should NOT be able to transition to Sent (Draft -> Sent, but we're in Sent)
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Sent));
+
+            // SHOULD be able to transition to Paid (Sent -> Paid)
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Paid));
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Paid));
+            Assert.AreEqual(InvoiceStatus.Paid, invoice.Status);
+        }
+
+        [TestMethod]
+        public void EntityState_DefaultEnumValue_WorksCorrectly()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Sent); // NOT the default enum value (Draft = 0)
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    builder.AllowTransition(InvoiceStatus.Sent, InvoiceStatus.Paid);
+                });
+
+            // New entity has default enum value (Draft = 0), not the configured initial state
+            var invoice = new Invoice { Id = 1 }; // Status defaults to Draft (0)
+
+            Assert.AreEqual(InvoiceStatus.Draft, invoice.Status);
+            Assert.AreEqual(InvoiceStatus.Sent, StateMachine<Invoice, InvoiceStatus>.InitialState);
+
+            // Can transition from actual state (Draft), not from InitialState
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Sent));
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice, InvoiceStatus.Paid));
+        }
+
+        [TestMethod]
+        public void TryTransitionAny_NoArgument_FromFinalState_ReturnsFalse()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Paid }; // Final state
+
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransitionAny(invoice);
+
+            Assert.IsFalse(result);
+            Assert.AreEqual(InvoiceStatus.Paid, invoice.Status);
+        }
+
         #endregion
     }
 }
