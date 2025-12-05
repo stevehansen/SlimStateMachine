@@ -1126,5 +1126,356 @@
         }
 
         #endregion
+
+        #region OnEntry/OnExit Tests
+
+        [TestMethod]
+        public void OnEntry_ExecutedAfterStateChange()
+        {
+            InvoiceStatus? stateWhenOnEntryCalled = null;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    builder.OnEntry(InvoiceStatus.Sent, inv => stateWhenOnEntryCalled = inv.Status);
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+
+            Assert.AreEqual(InvoiceStatus.Sent, stateWhenOnEntryCalled);
+        }
+
+        [TestMethod]
+        public void OnExit_ExecutedBeforeStateChange()
+        {
+            InvoiceStatus? stateWhenOnExitCalled = null;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                    builder.OnExit(InvoiceStatus.Draft, inv => stateWhenOnExitCalled = inv.Status);
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+
+            // OnExit is called before state change, so it should see Draft
+            Assert.AreEqual(InvoiceStatus.Draft, stateWhenOnExitCalled);
+        }
+
+        [TestMethod]
+        public void OnEntry_OnExit_BothExecutedInOrder()
+        {
+            var executionOrder = new List<string>();
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent,
+                        postAction: _ => executionOrder.Add("PostAction"));
+                    builder.OnExit(InvoiceStatus.Draft, _ => executionOrder.Add("OnExit"));
+                    builder.OnEntry(InvoiceStatus.Sent, _ => executionOrder.Add("OnEntry"));
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+
+            Assert.AreEqual(3, executionOrder.Count);
+            Assert.AreEqual("PostAction", executionOrder[0]);
+            Assert.AreEqual("OnExit", executionOrder[1]);
+            Assert.AreEqual("OnEntry", executionOrder[2]);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(InvalidOperationException))]
+        public void OnEntry_DuplicateRegistration_ThrowsInvalidOperationException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.OnEntry(InvoiceStatus.Sent, _ => { });
+                    builder.OnEntry(InvoiceStatus.Sent, _ => { }); // Duplicate
+                });
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(InvalidOperationException))]
+        public void OnExit_DuplicateRegistration_ThrowsInvalidOperationException()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.OnExit(InvoiceStatus.Draft, _ => { });
+                    builder.OnExit(InvoiceStatus.Draft, _ => { }); // Duplicate
+                });
+        }
+
+        #endregion
+
+        #region OnTransition Event Tests
+
+        [TestMethod]
+        public void OnTransition_EventRaisedAfterSuccessfulTransition()
+        {
+            TransitionContext<Invoice, InvoiceStatus>? capturedContext = null;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                });
+
+            StateMachine<Invoice, InvoiceStatus>.OnTransition += ctx => capturedContext = ctx;
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+
+            Assert.IsNotNull(capturedContext);
+            Assert.AreSame(invoice, capturedContext.Entity);
+            Assert.AreEqual(InvoiceStatus.Draft, capturedContext.FromState);
+            Assert.AreEqual(InvoiceStatus.Sent, capturedContext.ToState);
+            Assert.IsFalse(capturedContext.WasForced);
+        }
+
+        [TestMethod]
+        public void OnTransition_NotRaisedOnFailedTransition()
+        {
+            bool eventRaised = false;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent,
+                        preCondition: _ => false); // Always fails
+                });
+
+            StateMachine<Invoice, InvoiceStatus>.OnTransition += _ => eventRaised = true;
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+
+            Assert.IsFalse(eventRaised);
+        }
+
+        [TestMethod]
+        public void OnTransition_IncludesReasonAndMetadata()
+        {
+            TransitionContext<Invoice, InvoiceStatus>? capturedContext = null;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                });
+
+            StateMachine<Invoice, InvoiceStatus>.OnTransition += ctx => capturedContext = ctx;
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            var metadata = new Dictionary<string, object> { ["UserId"] = 123, ["Source"] = "API" };
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent, "Customer requested", metadata);
+
+            Assert.IsNotNull(capturedContext);
+            Assert.AreEqual("Customer requested", capturedContext.Reason);
+            Assert.IsNotNull(capturedContext.Metadata);
+            Assert.AreEqual(123, capturedContext.Metadata["UserId"]);
+            Assert.AreEqual("API", capturedContext.Metadata["Source"]);
+        }
+
+        #endregion
+
+        #region GetAllStates/GetAllTransitions Tests
+
+        [TestMethod]
+        public void GetAllStates_ReturnsAllEnumValues()
+        {
+            ConfigureInvoiceStateMachine();
+
+            var allStates = StateMachine<Invoice, InvoiceStatus>.GetAllStates();
+
+            Assert.AreEqual(4, allStates.Length);
+            CollectionAssert.Contains(allStates, InvoiceStatus.Draft);
+            CollectionAssert.Contains(allStates, InvoiceStatus.Sent);
+            CollectionAssert.Contains(allStates, InvoiceStatus.Paid);
+            CollectionAssert.Contains(allStates, InvoiceStatus.Cancelled);
+        }
+
+        [TestMethod]
+        public void GetAllTransitions_ReturnsCompleteTransitionMap()
+        {
+            ConfigureInvoiceStateMachine();
+
+            var transitions = StateMachine<Invoice, InvoiceStatus>.GetAllTransitions();
+
+            Assert.IsTrue(transitions.ContainsKey(InvoiceStatus.Draft));
+            Assert.IsTrue(transitions.ContainsKey(InvoiceStatus.Sent));
+
+            // Draft can go to Sent or Cancelled
+            CollectionAssert.Contains(transitions[InvoiceStatus.Draft], InvoiceStatus.Sent);
+            CollectionAssert.Contains(transitions[InvoiceStatus.Draft], InvoiceStatus.Cancelled);
+
+            // Sent can go to Paid, Cancelled, or Draft
+            CollectionAssert.Contains(transitions[InvoiceStatus.Sent], InvoiceStatus.Paid);
+            CollectionAssert.Contains(transitions[InvoiceStatus.Sent], InvoiceStatus.Cancelled);
+            CollectionAssert.Contains(transitions[InvoiceStatus.Sent], InvoiceStatus.Draft);
+        }
+
+        #endregion
+
+        #region ForceTransition Tests
+
+        [TestMethod]
+        public void ForceTransition_BypassesPreCondition()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent,
+                        preCondition: _ => false); // Always fails
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            // Normal transition fails
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent));
+            Assert.AreEqual(InvoiceStatus.Draft, invoice.Status);
+
+            // Force transition succeeds
+            Assert.IsTrue(StateMachine<Invoice, InvoiceStatus>.ForceTransition(invoice, InvoiceStatus.Sent));
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status);
+        }
+
+        [TestMethod]
+        public void ForceTransition_StillRequiresDefinedTransition()
+        {
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            // Cannot force transition that isn't defined
+            Assert.IsFalse(StateMachine<Invoice, InvoiceStatus>.ForceTransition(invoice, InvoiceStatus.Paid));
+            Assert.AreEqual(InvoiceStatus.Draft, invoice.Status);
+        }
+
+        [TestMethod]
+        public void ForceTransition_SetsWasForcedInContext()
+        {
+            TransitionContext<Invoice, InvoiceStatus>? capturedContext = null;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent,
+                        preCondition: _ => false);
+                });
+
+            StateMachine<Invoice, InvoiceStatus>.OnTransition += ctx => capturedContext = ctx;
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.ForceTransition(invoice, InvoiceStatus.Sent, "Admin override");
+
+            Assert.IsNotNull(capturedContext);
+            Assert.IsTrue(capturedContext.WasForced);
+            Assert.AreEqual("Admin override", capturedContext.Reason);
+        }
+
+        [TestMethod]
+        public void ForceTransition_ExecutesOnEntryOnExit()
+        {
+            var executionOrder = new List<string>();
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent,
+                        preCondition: _ => false);
+                    builder.OnExit(InvoiceStatus.Draft, _ => executionOrder.Add("OnExit"));
+                    builder.OnEntry(InvoiceStatus.Sent, _ => executionOrder.Add("OnEntry"));
+                });
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            StateMachine<Invoice, InvoiceStatus>.ForceTransition(invoice, InvoiceStatus.Sent);
+
+            Assert.AreEqual(2, executionOrder.Count);
+            Assert.AreEqual("OnExit", executionOrder[0]);
+            Assert.AreEqual("OnEntry", executionOrder[1]);
+        }
+
+        #endregion
+
+        #region TryTransition with Reason/Metadata Tests
+
+        [TestMethod]
+        public void TryTransition_WithReason_Succeeds()
+        {
+            ConfigureInvoiceStateMachine();
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+
+            var result = StateMachine<Invoice, InvoiceStatus>.TryTransition(
+                invoice, InvoiceStatus.Sent, "Sending to customer");
+
+            Assert.IsTrue(result);
+            Assert.AreEqual(InvoiceStatus.Sent, invoice.Status);
+        }
+
+        [TestMethod]
+        public void TryTransition_WithMetadata_PassedToEvent()
+        {
+            IReadOnlyDictionary<string, object>? capturedMetadata = null;
+
+            StateMachine<Invoice, InvoiceStatus>.Configure(
+                invoice => invoice.Status,
+                builder =>
+                {
+                    builder.SetInitialState(InvoiceStatus.Draft);
+                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                });
+
+            StateMachine<Invoice, InvoiceStatus>.OnTransition += ctx => capturedMetadata = ctx.Metadata;
+
+            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+            var metadata = new Dictionary<string, object>
+            {
+                ["Timestamp"] = DateTime.UtcNow,
+                ["TriggeredBy"] = "System"
+            };
+
+            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent, null, metadata);
+
+            Assert.IsNotNull(capturedMetadata);
+            Assert.AreEqual("System", capturedMetadata["TriggeredBy"]);
+        }
+
+        #endregion
     }
 }
