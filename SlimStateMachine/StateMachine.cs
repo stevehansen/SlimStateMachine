@@ -24,6 +24,11 @@ public static partial class StateMachine<TEntity, TEnum>
 #else
     private static readonly object _configureLock = new();
 #endif
+
+    /// <summary>
+    /// Event raised after a successful state transition.
+    /// </summary>
+    public static event Action<TransitionContext<TEntity, TEnum>>? OnTransition;
     // ReSharper restore StaticMemberInGenericType
 
     /// <summary>
@@ -125,32 +130,75 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <exception cref="StateMachineException">Can be thrown by PostActions if they encounter errors.</exception>
     public static bool TryTransition(TEntity entity, TEnum toState)
     {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-        return TryTransition(config, entity, currentState, toState);
+        return TryTransition(entity, toState, reason: null, metadata: null);
     }
 
-    private static bool TryTransition(StateMachineConfiguration<TEntity, TEnum> config, TEntity entity, TEnum currentState, TEnum toState)
+    /// <summary>
+    /// Attempts to transition the entity to the specified target state from its current state,
+    /// with an optional reason for the transition.
+    /// </summary>
+    /// <param name="entity">The entity instance.</param>
+    /// <param name="toState">The target state.</param>
+    /// <param name="reason">Optional reason or description for the transition.</param>
+    /// <param name="metadata">Optional metadata associated with the transition.</param>
+    /// <returns>True if the transition was successful, false otherwise.</returns>
+    public static bool TryTransition(TEntity entity, TEnum toState, string? reason, IReadOnlyDictionary<string, object>? metadata = null)
+    {
+        var config = GetConfiguration();
+        var currentState = config.GetCurrentState(entity);
+        return TryTransitionInternal(config, entity, currentState, toState, reason, metadata, force: false);
+    }
+
+    private static bool TryTransitionInternal(
+        StateMachineConfiguration<TEntity, TEnum> config,
+        TEntity entity,
+        TEnum currentState,
+        TEnum toState,
+        string? reason,
+        IReadOnlyDictionary<string, object>? metadata,
+        bool force)
     {
         var transition = config.FindTransition(currentState, toState);
 
-        if (transition == null || !transition.IsPreConditionMet(entity))
+        if (transition == null)
         {
-            return false; // Transition not defined or pre-condition failed
+            return false; // Transition not defined
         }
 
-        // Pre-conditions met, execute post-action FIRST, then change state
+        if (!force && !transition.IsPreConditionMet(entity))
+        {
+            return false; // Pre-condition failed (unless forced)
+        }
+
         try
         {
+            // 1. Execute transition's post-action (legacy - runs before state change)
             transition.ExecutePostAction(entity);
-            config.SetState(entity, toState); // Update the entity's state property
+
+            // 2. Execute OnExit action for current state
+            config.ExecuteOnExit(entity, currentState);
+
+            // 3. Update the entity's state property
+            config.SetState(entity, toState);
+
+            // 4. Execute OnEntry action for new state
+            config.ExecuteOnEntry(entity, toState);
+
+            // 5. Raise OnTransition event
+            var context = new TransitionContext<TEntity, TEnum>(entity, currentState, toState, reason, metadata, force);
+            OnTransition?.Invoke(context);
+
             return true;
         }
         catch (Exception ex)
         {
-            // Wrap exceptions from PostAction for clarity
-            throw new StateMachineException($"Error executing post-action for transition from {currentState} to {toState}: {ex.Message}", ex);
+            throw new StateMachineException($"Error during transition from {currentState} to {toState}: {ex.Message}", ex);
         }
+    }
+
+    private static bool TryTransition(StateMachineConfiguration<TEntity, TEnum> config, TEntity entity, TEnum currentState, TEnum toState)
+    {
+        return TryTransitionInternal(config, entity, currentState, toState, reason: null, metadata: null, force: false);
     }
 
     /// <summary>
@@ -239,6 +287,48 @@ public static partial class StateMachine<TEntity, TEnum>
         var config = GetConfiguration();
         var currentState = config.GetCurrentState(entity);
         return config.FinalStates.Contains(currentState);
+    }
+
+    /// <summary>
+    /// Forces a transition to the specified state, bypassing pre-conditions.
+    /// The transition must still be defined in the state machine configuration.
+    /// Use with caution - this is intended for administrative or recovery scenarios.
+    /// </summary>
+    /// <param name="entity">The entity instance.</param>
+    /// <param name="toState">The target state.</param>
+    /// <param name="reason">Optional reason for the forced transition.</param>
+    /// <param name="metadata">Optional metadata associated with the transition.</param>
+    /// <returns>True if the transition was successful (transition was defined), false otherwise.</returns>
+    public static bool ForceTransition(TEntity entity, TEnum toState, string? reason = null, IReadOnlyDictionary<string, object>? metadata = null)
+    {
+        var config = GetConfiguration();
+        var currentState = config.GetCurrentState(entity);
+        return TryTransitionInternal(config, entity, currentState, toState, reason, metadata, force: true);
+    }
+
+    /// <summary>
+    /// Gets all states defined in the enum type.
+    /// </summary>
+    /// <returns>An array of all enum values.</returns>
+    public static TEnum[] GetAllStates()
+    {
+#if NET9_0_OR_GREATER
+        return Enum.GetValues<TEnum>();
+#else
+        return Enum.GetValues(typeof(TEnum)).Cast<TEnum>().ToArray();
+#endif
+    }
+
+    /// <summary>
+    /// Gets all defined transitions in the state machine.
+    /// </summary>
+    /// <returns>A dictionary where keys are source states and values are arrays of target states.</returns>
+    public static IReadOnlyDictionary<TEnum, TEnum[]> GetAllTransitions()
+    {
+        var config = GetConfiguration();
+        return config.Transitions.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Select(t => t.ToState).ToArray());
     }
 
     /// <summary>
@@ -341,5 +431,6 @@ public static partial class StateMachine<TEntity, TEnum>
     internal static void ClearConfiguration_TestOnly()
     {
         _config = null; // Reset the configuration
+        OnTransition = null; // Clear event handlers
     }
 }
