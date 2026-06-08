@@ -46,3 +46,23 @@ public class Order
     public OrderStatus Status { get; set; }
     public string? CustomerName { get; set; }
 }
+
+/// <summary>
+/// Dedicated entity/enum pair used only by StateMachineDefinitionTests' static-façade tests,
+/// so they never share the static StateMachine&lt;,&gt; cache with any other test class under
+/// class-level parallelization.
+/// </summary>
+public enum TicketStatus
+{
+    Open,
+    InProgress,
+    Resolved,
+    Closed
+}
+
+public class Ticket
+{
+    public int Id { get; set; }
+    public TicketStatus Status { get; set; }
+    public bool IsApproved { get; set; }
+}

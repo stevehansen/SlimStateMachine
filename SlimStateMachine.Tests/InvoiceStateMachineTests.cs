@@ -8,7 +8,7 @@
         public void TestInitialize()
         {
             // Use internal method for test cleanup
-            StateMachine<Invoice, InvoiceStatus>.ClearConfiguration_TestOnly();
+            StateMachine<Invoice, InvoiceStatus>.Reset();
         }
 
         private static void ConfigureInvoiceStateMachine(bool includeConditions = true)
@@ -170,7 +170,7 @@
             var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Sent, TotalAmount = 100, AmountPaid = 100 };
             string? reason = null;
             // Reconfigure slightly to capture post action effect
-            StateMachine<Invoice, InvoiceStatus>.ClearConfiguration_TestOnly();
+            StateMachine<Invoice, InvoiceStatus>.Reset();
             StateMachine<Invoice, InvoiceStatus>.Configure(inv => inv.Status, b => {
                 b.SetInitialState(InvoiceStatus.Draft);
                 b.AllowTransition(InvoiceStatus.Sent, InvoiceStatus.Paid, inv => inv.RemainingAmount <= 0, null, _ => reason = "Paid");
@@ -950,8 +950,8 @@
         public void TestCleanup()
         {
             // Clean up Order state machine after tests that use it
-            StateMachine<Order, OrderStatus>.ClearConfiguration_TestOnly();
-            StateMachine<ReadOnlyInvoice, InvoiceStatus>.ClearConfiguration_TestOnly();
+            StateMachine<Order, OrderStatus>.Reset();
+            StateMachine<ReadOnlyInvoice, InvoiceStatus>.Reset();
         }
 
         #endregion

@@ -1,7 +1,5 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
-using System.Text;
-using SlimStateMachine.Internal;
 
 [assembly: InternalsVisibleTo("SlimStateMachine.Tests")]
 
@@ -9,27 +7,48 @@ namespace SlimStateMachine;
 
 /// <summary>
 /// Provides static methods for defining and interacting with state machines
-/// associated with an entity type and its status enum property.
+/// associated with an entity type and its status enum property. This is a thin,
+/// resettable façade over a single registered <see cref="StateMachineDefinition{TEntity, TEnum}"/> instance.
 /// </summary>
 /// <typeparam name="TEntity">The type of the entity being managed.</typeparam>
 /// <typeparam name="TEnum">The enum type representing the state (must be struct, Enum).</typeparam>
 public static partial class StateMachine<TEntity, TEnum>
     where TEnum : struct, Enum // Ensure TEnum is an enum
 {
-    private static StateMachineConfiguration<TEntity, TEnum>? _config;
-
     // ReSharper disable StaticMemberInGenericType
+    private static StateMachineDefinition<TEntity, TEnum>? _current;
+
 #if NET9_0_OR_GREATER
     private static readonly Lock _configureLock = new();
 #else
     private static readonly object _configureLock = new();
 #endif
+    // ReSharper restore StaticMemberInGenericType
 
     /// <summary>
-    /// Event raised after a successful state transition.
+    /// Event raised after a successful state transition. Forwards subscriptions to the
+    /// registered instance, so the state machine must be configured first.
     /// </summary>
-    public static event Action<TransitionContext<TEntity, TEnum>>? OnTransition;
-    // ReSharper restore StaticMemberInGenericType
+    public static event Action<TransitionContext<TEntity, TEnum>>? OnTransition
+    {
+        add => Current.OnTransition += value;
+        remove => Current.OnTransition -= value;
+    }
+
+    /// <summary>
+    /// Gets the registered state machine instance.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if the state machine is not configured.</exception>
+    public static StateMachineDefinition<TEntity, TEnum> Current
+    {
+        get
+        {
+            if (_current is null)
+                throw new InvalidOperationException($"State machine for {typeof(TEntity).Name} with status {typeof(TEnum).Name} has not been configured. Call Configure() first.");
+
+            return _current;
+        }
+    }
 
     /// <summary>
     /// Configures the state machine for the given TEntity and TEnum types.
@@ -48,15 +67,13 @@ public static partial class StateMachine<TEntity, TEnum>
         if (configureAction == null) throw new ArgumentNullException(nameof(configureAction));
 
         // Double-checked locking pattern for thread-safe initialization
-        if (_config is null)
+        if (_current is null)
         {
             lock (_configureLock)
             {
-                if (_config is null)
+                if (_current is null)
                 {
-                    var builder = new StateMachineConfigurationBuilder<TEntity, TEnum>(statusPropertyAccessor);
-                    configureAction(builder);
-                    _config = builder.Build(); // Build validates required settings like initial state
+                    _current = StateMachineDefinition<TEntity, TEnum>.Build(statusPropertyAccessor, configureAction);
 
                     return; // Exit after successful configuration
                 }
@@ -68,21 +85,51 @@ public static partial class StateMachine<TEntity, TEnum>
     }
 
     /// <summary>
-    /// Gets the configured state machine details. Internal use primarily.
+    /// Registers a pre-built state machine instance as the singleton for this TEntity/TEnum combination.
+    /// Like <see cref="Configure"/>, this is write-once.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown if the state machine is not configured.</exception>
-    private static StateMachineConfiguration<TEntity, TEnum> GetConfiguration()
+    /// <param name="definition">The instance to register.</param>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="definition"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the state machine for this TEntity/TEnum is already configured.</exception>
+    public static void Use(StateMachineDefinition<TEntity, TEnum> definition)
     {
-        if (_config is null)
-            throw new InvalidOperationException($"State machine for {typeof(TEntity).Name} with status {typeof(TEnum).Name} has not been configured. Call Configure() first.");
+        if (definition == null) throw new ArgumentNullException(nameof(definition));
 
-        return _config;
+        if (_current is null)
+        {
+            lock (_configureLock)
+            {
+                if (_current is null)
+                {
+                    _current = definition;
+
+                    return;
+                }
+            }
+        }
+
+        throw new InvalidOperationException($"State machine for {typeof(TEntity).Name} with status {typeof(TEnum).Name} is already configured.");
+    }
+
+    /// <summary>
+    /// Clears the registered instance for this TEntity/TEnum combination, allowing reconfiguration.
+    /// Idempotent.
+    /// </summary>
+    /// <returns>True if an instance was registered and has now been cleared; false if nothing was registered.</returns>
+    public static bool Reset()
+    {
+        lock (_configureLock)
+        {
+            var wasConfigured = _current is not null;
+            _current = null;
+            return wasConfigured;
+        }
     }
 
     /// <summary>
     /// Gets the initial state defined for this state machine.
     /// </summary>
-    public static TEnum InitialState => GetConfiguration().InitialState;
+    public static TEnum InitialState => Current.InitialState;
 
     /// <summary>
     /// Checks if a transition from the entity's current state to the specified target state is possible,
@@ -91,12 +138,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <param name="entity">The entity instance.</param>
     /// <param name="toState">The target state.</param>
     /// <returns>True if the transition is allowed, false otherwise.</returns>
-    public static bool CanTransition(TEntity entity, TEnum toState)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-        return CanTransition(entity, currentState, toState);
-    }
+    public static bool CanTransition(TEntity entity, TEnum toState) => Current.CanTransition(entity, toState);
 
     /// <summary>
     /// Checks if a transition from the specified source state to the target state is possible
@@ -106,18 +148,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <param name="fromState">The source state.</param>
     /// <param name="toState">The target state.</param>
     /// <returns>True if the transition is allowed, false otherwise.</returns>
-    public static bool CanTransition(TEntity entity, TEnum fromState, TEnum toState)
-    {
-        var config = GetConfiguration();
-        var transition = config.FindTransition(fromState, toState);
-
-        if (transition == null)
-        {
-            return false; // No transition defined
-        }
-
-        return transition.IsPreConditionMet(entity); // Check pre-condition
-    }
+    public static bool CanTransition(TEntity entity, TEnum fromState, TEnum toState) => Current.CanTransition(entity, fromState, toState);
 
     /// <summary>
     /// Attempts to transition the entity to the specified target state from its current state.
@@ -128,10 +159,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <param name="toState">The target state.</param>
     /// <returns>True if the transition was successful, false otherwise.</returns>
     /// <exception cref="StateMachineException">Can be thrown by PostActions if they encounter errors.</exception>
-    public static bool TryTransition(TEntity entity, TEnum toState)
-    {
-        return TryTransition(entity, toState, reason: null, metadata: null);
-    }
+    public static bool TryTransition(TEntity entity, TEnum toState) => Current.TryTransition(entity, toState);
 
     /// <summary>
     /// Attempts to transition the entity to the specified target state from its current state,
@@ -142,64 +170,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <param name="reason">Optional reason or description for the transition.</param>
     /// <param name="metadata">Optional metadata associated with the transition.</param>
     /// <returns>True if the transition was successful, false otherwise.</returns>
-    public static bool TryTransition(TEntity entity, TEnum toState, string? reason, IReadOnlyDictionary<string, object>? metadata = null)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-        return TryTransitionInternal(config, entity, currentState, toState, reason, metadata, force: false);
-    }
-
-    private static bool TryTransitionInternal(
-        StateMachineConfiguration<TEntity, TEnum> config,
-        TEntity entity,
-        TEnum currentState,
-        TEnum toState,
-        string? reason,
-        IReadOnlyDictionary<string, object>? metadata,
-        bool force)
-    {
-        var transition = config.FindTransition(currentState, toState);
-
-        if (transition == null)
-        {
-            return false; // Transition not defined
-        }
-
-        if (!force && !transition.IsPreConditionMet(entity))
-        {
-            return false; // Pre-condition failed (unless forced)
-        }
-
-        try
-        {
-            // 1. Execute transition's post-action (legacy - runs before state change)
-            transition.ExecutePostAction(entity);
-
-            // 2. Execute OnExit action for current state
-            config.ExecuteOnExit(entity, currentState);
-
-            // 3. Update the entity's state property
-            config.SetState(entity, toState);
-
-            // 4. Execute OnEntry action for new state
-            config.ExecuteOnEntry(entity, toState);
-
-            // 5. Raise OnTransition event
-            var context = new TransitionContext<TEntity, TEnum>(entity, currentState, toState, reason, metadata, force);
-            OnTransition?.Invoke(context);
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            throw new StateMachineException($"Error during transition from {currentState} to {toState}: {ex.Message}", ex);
-        }
-    }
-
-    private static bool TryTransition(StateMachineConfiguration<TEntity, TEnum> config, TEntity entity, TEnum currentState, TEnum toState)
-    {
-        return TryTransitionInternal(config, entity, currentState, toState, reason: null, metadata: null, force: false);
-    }
+    public static bool TryTransition(TEntity entity, TEnum toState, string? reason, IReadOnlyDictionary<string, object>? metadata = null) => Current.TryTransition(entity, toState, reason, metadata);
 
     /// <summary>
     /// Attempts to transition the entity to the first valid target state from its current state,
@@ -209,23 +180,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <param name="toStates">The ordered list of possible target states to try.</param>
     /// <param name="successfulState">The state to which the transition was made, or default if none succeeded.</param>
     /// <returns>True if a transition was successful, false otherwise.</returns>
-    public static bool TryTransitionAny(TEntity entity, IReadOnlyCollection<TEnum> toStates, out TEnum successfulState)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-
-        foreach (var toState in toStates)
-        {
-            if (TryTransition(config, entity, currentState, toState))
-            {
-                successfulState = toState;
-                return true;
-            }
-        }
-
-        successfulState = default;
-        return false;
-    }
+    public static bool TryTransitionAny(TEntity entity, IReadOnlyCollection<TEnum> toStates, out TEnum successfulState) => Current.TryTransitionAny(entity, toStates, out successfulState);
 
     /// <summary>
     /// Attempts to transition the entity to the first valid target state from its current state.
@@ -233,13 +188,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// </summary>
     /// <param name="entity">The entity instance.</param>
     /// <returns>True if a transition was successful, false otherwise.</returns>
-    public static bool TryTransitionAny(TEntity entity)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-
-        return config.GetTransitionsFrom(currentState).Any(transition => TryTransition(config, entity, currentState, transition.ToState));
-    }
+    public static bool TryTransitionAny(TEntity entity) => Current.TryTransitionAny(entity);
 
     /// <summary>
     /// Gets a list of states that the entity can transition to from its current state,
@@ -247,15 +196,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// </summary>
     /// <param name="entity">The entity instance.</param>
     /// <returns>An enumerable of possible target states.</returns>
-    public static IEnumerable<TEnum> GetPossibleTransitions(TEntity entity)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-
-        return config.GetTransitionsFrom(currentState)
-            .Where(transition => transition.IsPreConditionMet(entity))
-            .Select(transition => transition.ToState);
-    }
+    public static IEnumerable<TEnum> GetPossibleTransitions(TEntity entity) => Current.GetPossibleTransitions(entity);
 
     /// <summary>
     /// Gets a list of all defined target states reachable from a given state,
@@ -263,31 +204,17 @@ public static partial class StateMachine<TEntity, TEnum>
     /// </summary>
     /// <param name="fromState">The source state.</param>
     /// <returns>An enumerable of defined target states.</returns>
-    public static IEnumerable<TEnum> GetDefinedTransitions(TEnum fromState)
-    {
-        var config = GetConfiguration();
-        return config.GetTransitionsFrom(fromState)
-            .Select(transition => transition.ToState);
-    }
+    public static IEnumerable<TEnum> GetDefinedTransitions(TEnum fromState) => Current.GetDefinedTransitions(fromState);
 
     /// <summary>
     /// Returns true if the given state is a final state (i.e., has no outgoing transitions).
     /// </summary>
-    public static bool IsFinalState(TEnum state)
-    {
-        var config = GetConfiguration();
-        return config.FinalStates.Contains(state);
-    }
+    public static bool IsFinalState(TEnum state) => Current.IsFinalState(state);
 
     /// <summary>
     /// Returns true if the entity is currently in a final state (i.e., has no outgoing transitions).
     /// </summary>
-    public static bool IsInFinalState(TEntity entity)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-        return config.FinalStates.Contains(currentState);
-    }
+    public static bool IsInFinalState(TEntity entity) => Current.IsInFinalState(entity);
 
     /// <summary>
     /// Forces a transition to the specified state, bypassing pre-conditions.
@@ -299,46 +226,25 @@ public static partial class StateMachine<TEntity, TEnum>
     /// <param name="reason">Optional reason for the forced transition.</param>
     /// <param name="metadata">Optional metadata associated with the transition.</param>
     /// <returns>True if the transition was successful (transition was defined), false otherwise.</returns>
-    public static bool ForceTransition(TEntity entity, TEnum toState, string? reason = null, IReadOnlyDictionary<string, object>? metadata = null)
-    {
-        var config = GetConfiguration();
-        var currentState = config.GetCurrentState(entity);
-        return TryTransitionInternal(config, entity, currentState, toState, reason, metadata, force: true);
-    }
+    public static bool ForceTransition(TEntity entity, TEnum toState, string? reason = null, IReadOnlyDictionary<string, object>? metadata = null) => Current.ForceTransition(entity, toState, reason, metadata);
 
     /// <summary>
     /// Gets all states defined in the enum type.
     /// </summary>
     /// <returns>An array of all enum values.</returns>
-    public static TEnum[] GetAllStates()
-    {
-#if NET9_0_OR_GREATER
-        return Enum.GetValues<TEnum>();
-#else
-        return Enum.GetValues(typeof(TEnum)).Cast<TEnum>().ToArray();
-#endif
-    }
+    public static TEnum[] GetAllStates() => Current.GetAllStates();
 
     /// <summary>
     /// Gets all defined transitions in the state machine.
     /// </summary>
     /// <returns>A dictionary where keys are source states and values are arrays of target states.</returns>
-    public static IReadOnlyDictionary<TEnum, TEnum[]> GetAllTransitions()
-    {
-        var config = GetConfiguration();
-        return config.Transitions.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.Select(t => t.ToState).ToArray());
-    }
+    public static IReadOnlyDictionary<TEnum, TEnum[]> GetAllTransitions() => Current.GetAllTransitions();
 
     /// <summary>
     /// Generates a Mermaid graph definition string representing the configured state machine.
     /// </summary>
     /// <returns>A string suitable for rendering with Mermaid.js (e.g., in Markdown).</returns>
-    public static string GenerateMermaidGraph()
-    {
-        return GenerateMermaidGraph(entity: default, currentState: null);
-    }
+    public static string GenerateMermaidGraph() => Current.GenerateMermaidGraph();
 
     /// <summary>
     /// Generates a Mermaid graph definition string representing the configured state machine
@@ -346,10 +252,7 @@ public static partial class StateMachine<TEntity, TEnum>
     /// </summary>
     /// <param name="entity">The entity instance whose current state should be highlighted.</param>
     /// <returns>A string suitable for rendering with Mermaid.js.</returns>
-    public static string GenerateMermaidGraph(TEntity entity)
-    {
-        return GenerateMermaidGraph(entity: entity, null);
-    }
+    public static string GenerateMermaidGraph(TEntity entity) => Current.GenerateMermaidGraph(entity);
 
     /// <summary>
     /// Generates a Mermaid graph definition string representing the configured state machine
@@ -357,80 +260,5 @@ public static partial class StateMachine<TEntity, TEnum>
     /// </summary>
     /// <param name="currentState">The state to highlight.</param>
     /// <returns>A string suitable for rendering with Mermaid.js.</returns>
-    public static string GenerateMermaidGraph(TEnum currentState)
-    {
-        return GenerateMermaidGraph(entity: default, currentState);
-    }
-
-    private static string GenerateMermaidGraph(TEntity? entity, TEnum? currentState)
-    {
-        var config = GetConfiguration();
-        var sb = new StringBuilder();
-
-        // If entity is provided but currentState is default, get the current state from the entity
-        if (entity is not null && currentState is null)
-            currentState = config.GetCurrentState(entity);
-
-        sb.AppendLine("graph TD"); // Top-Down graph
-
-        // Add style for current state if specified
-        if (currentState is not null)
-        {
-            sb.AppendLine("    %% Styling for current state");
-            sb.AppendLine($"    style {currentState} fill:#ffffaa,stroke:#ffaa00,stroke-width:3px");
-        }
-
-        // Add initial state marker
-        sb.AppendLine($"    Start((\u26aa)) --> {config.InitialState}");
-
-        // Add all defined transitions
-        var allTransitions = config.Transitions.Values.SelectMany(list => list).ToArray();
-
-        if (!allTransitions.Any())
-        {
-            // If only initial state defined, ensure it shows up
-            sb.AppendLine($"    {config.InitialState}");
-        }
-        else
-        {
-            foreach (var transition in allTransitions)
-            {
-                if (!string.IsNullOrWhiteSpace(transition.PreConditionExpression))
-                {
-                    // Escape quotes in the condition expression for the label
-                    var safeCondition = transition.PreConditionExpression.Replace("\"", "#quot;");
-                    sb.AppendLine($"    {transition.FromState} -- \"{safeCondition}\" --> {transition.ToState}");
-                }
-                else
-                {
-                    sb.AppendLine($"    {transition.FromState} --> {transition.ToState}");
-                }
-            }
-        }
-
-        // Optional: Add states that might only be initial or final states and have no explicit transitions listed
-        //var allStatesMentioned = new HashSet<TEnum>(config.Transitions.Keys);
-        //allStatesMentioned.UnionWith(allTransitions.Select(t => t.ToState));
-        //allStatesMentioned.Add(config.InitialState);
-
-        // This part is usually implicitly handled by Mermaid, but can be explicit if needed
-        // foreach(var state in allStatesMentioned) {
-        //     if (!allTransitions.Any(t => t.FromState.Equals(state) || t.ToState.Equals(state))) {
-        //         sb.AppendLine($"    {state}"); // Ensure lone states are declared
-        //     }
-        // }
-
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Clears the configuration for this specific StateMachine&lt;TEntity, TEnum>.
-    /// Primarily useful for testing purposes to allow reconfiguration.
-    /// Use with caution in production environments.
-    /// </summary>
-    internal static void ClearConfiguration_TestOnly()
-    {
-        _config = null; // Reset the configuration
-        OnTransition = null; // Clear event handlers
-    }
+    public static string GenerateMermaidGraph(TEnum currentState) => Current.GenerateMermaidGraph(currentState);
 }
