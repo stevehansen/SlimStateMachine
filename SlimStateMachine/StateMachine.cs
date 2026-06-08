@@ -16,7 +16,7 @@ public static partial class StateMachine<TEntity, TEnum>
     where TEnum : struct, Enum // Ensure TEnum is an enum
 {
     // ReSharper disable StaticMemberInGenericType
-    private static StateMachineDefinition<TEntity, TEnum>? _current;
+    private static volatile StateMachineDefinition<TEntity, TEnum>? _current;
 
 #if NET9_0_OR_GREATER
     private static readonly Lock _configureLock = new();
@@ -32,7 +32,13 @@ public static partial class StateMachine<TEntity, TEnum>
     public static event Action<TransitionContext<TEntity, TEnum>>? OnTransition
     {
         add => Current.OnTransition += value;
-        remove => Current.OnTransition -= value;
+        remove
+        {
+            // Tolerate unsubscribe after Reset() (e.g. during disposal): nothing to remove.
+            var current = _current;
+            if (current is not null)
+                current.OnTransition -= value;
+        }
     }
 
     /// <summary>

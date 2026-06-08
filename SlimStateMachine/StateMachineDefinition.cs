@@ -173,6 +173,8 @@ public sealed partial class StateMachineDefinition<TEntity, TEnum>
     /// <returns>True if a transition was successful, false otherwise.</returns>
     public bool TryTransitionAny(TEntity entity, IReadOnlyCollection<TEnum> toStates, out TEnum successfulState)
     {
+        if (toStates == null) throw new ArgumentNullException(nameof(toStates));
+
         var currentState = _config.GetCurrentState(entity);
 
         foreach (var toState in toStates)
