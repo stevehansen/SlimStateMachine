@@ -25,6 +25,10 @@ dotnet run --project samples/SlimStateMachine.Samples
 
 SlimStateMachine is a lightweight C# library for defining and managing state machines based on an entity class and an enum property representing its state. It targets .NET 9.0, .NET 8.0, and .NET Standard 2.0.
 
+## Ubiquitous Language
+
+`UBIQUITOUS_LANGUAGE.md` (repo root) is the canonical domain glossary for state-machine modeling — States, Transitions, conditions, and actions. Use these terms in code, comments, and samples; consult its "Flagged ambiguities" before naming new concepts (notably **State vs. Status**, **post-action vs. OnExit action**, and **transition the act vs. allowed transition the rule**). Update it when introducing or renaming a domain concept.
+
 ## Architecture
 
 ### Core Components
