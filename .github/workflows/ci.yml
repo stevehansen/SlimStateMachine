@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [ development ]
+  pull_request:
+    branches: [ development ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Build
+      run: dotnet build SlimStateMachine.sln --configuration Release
+
+    - name: Test
+      run: dotnet test SlimStateMachine.sln --no-build --configuration Release
