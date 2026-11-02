@@ -247,10 +247,10 @@ namespace SlimStateMachine.Tests
             _ = BuildSimpleTicketDefinition();
 
             // Building an instance must NOT register it with the static façade.
-            Assert.ThrowsException<InvalidOperationException>(() =>
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
                 _ = StateMachine<Ticket, TicketStatus>.Current);
 
-            Assert.ThrowsException<InvalidOperationException>(() =>
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
                 _ = StateMachine<Ticket, TicketStatus>.InitialState);
         }
 
@@ -281,7 +281,7 @@ namespace SlimStateMachine.Tests
         {
             StateMachine<Ticket, TicketStatus>.Use(BuildSimpleTicketDefinition());
 
-            Assert.ThrowsException<InvalidOperationException>(() =>
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
                 StateMachine<Ticket, TicketStatus>.Use(BuildSimpleTicketDefinition()));
         }
 
@@ -292,7 +292,7 @@ namespace SlimStateMachine.Tests
                 ticket => ticket.Status,
                 builder => builder.SetInitialState(TicketStatus.Open));
 
-            Assert.ThrowsException<InvalidOperationException>(() =>
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
                 StateMachine<Ticket, TicketStatus>.Use(BuildSimpleTicketDefinition()));
         }
 
@@ -326,7 +326,7 @@ namespace SlimStateMachine.Tests
                 builder => builder.SetInitialState(TicketStatus.Open));
 
             Assert.IsTrue(StateMachine<Ticket, TicketStatus>.Reset());
-            Assert.ThrowsException<InvalidOperationException>(() =>
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
                 _ = StateMachine<Ticket, TicketStatus>.Current);
         }
 
@@ -371,7 +371,7 @@ namespace SlimStateMachine.Tests
         public void StaticOnTransition_SubscribeBeforeConfigure_Throws()
         {
             // Subscribe forwards to Current, which throws when unconfigured.
-            Assert.ThrowsException<InvalidOperationException>(() =>
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
                 StateMachine<Ticket, TicketStatus>.OnTransition += _ => { });
         }
 
@@ -436,7 +436,7 @@ namespace SlimStateMachine.Tests
         [TestMethod]
         public void Build_NullAccessor_ThrowsArgumentNullException()
         {
-            Assert.ThrowsException<ArgumentNullException>(() =>
+            Assert.ThrowsExactly<ArgumentNullException>(() =>
                 StateMachineDefinition<Invoice, InvoiceStatus>.Build(
                     null!,
                     builder => builder.SetInitialState(InvoiceStatus.Draft)));
@@ -445,7 +445,7 @@ namespace SlimStateMachine.Tests
         [TestMethod]
         public void Build_NullConfigureAction_ThrowsArgumentNullException()
         {
-            Assert.ThrowsException<ArgumentNullException>(() =>
+            Assert.ThrowsExactly<ArgumentNullException>(() =>
                 StateMachineDefinition<Invoice, InvoiceStatus>.Build(
                     invoice => invoice.Status,
                     null!));
