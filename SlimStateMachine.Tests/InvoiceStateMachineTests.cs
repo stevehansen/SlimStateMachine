@@ -63,30 +63,36 @@
         }
 
         [TestMethod]
-        [ExpectedException(typeof(InvalidOperationException))]
         public void Configure_ThrowsIfAlreadyConfigured()
         {
-            ConfigureInvoiceStateMachine();
-            ConfigureInvoiceStateMachine(); // Try to configure again
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+            {
+                ConfigureInvoiceStateMachine();
+                ConfigureInvoiceStateMachine(); // Try to configure again
+            });
         }
 
         [TestMethod]
-        [ExpectedException(typeof(StateMachineException))]
         public void Configure_ThrowsIfInitialStateNotSet()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-               invoice => invoice.Status,
-               builder => {
-                   // Missing builder.SetInitialState(...)
-                   builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
-               });
+            Assert.ThrowsExactly<StateMachineException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                   invoice => invoice.Status,
+                   builder => {
+                       // Missing builder.SetInitialState(...)
+                       builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                   });
+            });
         }
 
         [TestMethod]
-        [ExpectedException(typeof(InvalidOperationException))]
         public void GetInitialState_ThrowsIfNotConfigured()
         {
-            _ = StateMachine<Invoice, InvoiceStatus>.InitialState;
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+            {
+                _ = StateMachine<Invoice, InvoiceStatus>.InitialState;
+            });
         }
 
         [TestMethod]
@@ -653,49 +659,57 @@
         #region Error Handling Tests
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void Configure_NullStatusPropertyAccessor_ThrowsArgumentNullException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                null!,
-                builder => builder.SetInitialState(InvoiceStatus.Draft));
+            Assert.ThrowsExactly<ArgumentNullException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    null!,
+                    builder => builder.SetInitialState(InvoiceStatus.Draft));
+            });
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void Configure_NullConfigureAction_ThrowsArgumentNullException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                invoice => invoice.Status,
-                null!);
+            Assert.ThrowsExactly<ArgumentNullException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    invoice => invoice.Status,
+                    null!);
+            });
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
         public void Configure_InvalidExpression_NotProperty_ThrowsArgumentException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                invoice => invoice.GetHashCode() == 0 ? InvoiceStatus.Draft : InvoiceStatus.Sent,
-                builder => builder.SetInitialState(InvoiceStatus.Draft));
+            Assert.ThrowsExactly<ArgumentException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    invoice => invoice.GetHashCode() == 0 ? InvoiceStatus.Draft : InvoiceStatus.Sent,
+                    builder => builder.SetInitialState(InvoiceStatus.Draft));
+            });
         }
 
         [TestMethod]
-        [ExpectedException(typeof(StateMachineException))]
         public void TryTransition_PostActionThrows_WrapsInStateMachineException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                invoice => invoice.Status,
-                builder =>
-                {
-                    builder.SetInitialState(InvoiceStatus.Draft);
-                    builder.AllowTransition(
-                        InvoiceStatus.Draft,
-                        InvoiceStatus.Sent,
-                        postAction: _ => throw new InvalidOperationException("Post action failed"));
-                });
+            Assert.ThrowsExactly<StateMachineException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    invoice => invoice.Status,
+                    builder =>
+                    {
+                        builder.SetInitialState(InvoiceStatus.Draft);
+                        builder.AllowTransition(
+                            InvoiceStatus.Draft,
+                            InvoiceStatus.Sent,
+                            postAction: _ => throw new InvalidOperationException("Post action failed"));
+                    });
 
-            var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
-            StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+                var invoice = new Invoice { Id = 1, Status = InvoiceStatus.Draft };
+                StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice, InvoiceStatus.Sent);
+            });
         }
 
         [TestMethod]
@@ -733,17 +747,19 @@
         #region Configuration Validation Tests
 
         [TestMethod]
-        [ExpectedException(typeof(InvalidOperationException))]
         public void AllowTransition_DuplicateTransition_ThrowsInvalidOperationException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                invoice => invoice.Status,
-                builder =>
-                {
-                    builder.SetInitialState(InvoiceStatus.Draft);
-                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
-                    builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent); // Duplicate
-                });
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    invoice => invoice.Status,
+                    builder =>
+                    {
+                        builder.SetInitialState(InvoiceStatus.Draft);
+                        builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent);
+                        builder.AllowTransition(InvoiceStatus.Draft, InvoiceStatus.Sent); // Duplicate
+                    });
+            });
         }
 
         [TestMethod]
@@ -765,12 +781,14 @@
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
         public void Configure_ReadOnlyProperty_ThrowsArgumentException()
         {
-            StateMachine<ReadOnlyInvoice, InvoiceStatus>.Configure(
-                invoice => invoice.Status,
-                builder => builder.SetInitialState(InvoiceStatus.Draft));
+            Assert.ThrowsExactly<ArgumentException>(() =>
+            {
+                StateMachine<ReadOnlyInvoice, InvoiceStatus>.Configure(
+                    invoice => invoice.Status,
+                    builder => builder.SetInitialState(InvoiceStatus.Draft));
+            });
         }
 
         #endregion
@@ -826,7 +844,7 @@
             ConfigureInvoiceStateMachine();
             Invoice? invoice = null;
 
-            Assert.ThrowsException<NullReferenceException>(() =>
+            Assert.ThrowsExactly<NullReferenceException>(() =>
                 StateMachine<Invoice, InvoiceStatus>.CanTransition(invoice!, InvoiceStatus.Sent));
         }
 
@@ -836,7 +854,7 @@
             ConfigureInvoiceStateMachine();
             Invoice? invoice = null;
 
-            Assert.ThrowsException<NullReferenceException>(() =>
+            Assert.ThrowsExactly<NullReferenceException>(() =>
                 StateMachine<Invoice, InvoiceStatus>.TryTransition(invoice!, InvoiceStatus.Sent));
         }
 
@@ -846,7 +864,7 @@
             ConfigureInvoiceStateMachine();
             Invoice? invoice = null;
 
-            Assert.ThrowsException<NullReferenceException>(() =>
+            Assert.ThrowsExactly<NullReferenceException>(() =>
                 StateMachine<Invoice, InvoiceStatus>.GetPossibleTransitions(invoice!).ToList());
         }
 
@@ -856,7 +874,7 @@
             ConfigureInvoiceStateMachine();
             Invoice? invoice = null;
 
-            Assert.ThrowsException<NullReferenceException>(() =>
+            Assert.ThrowsExactly<NullReferenceException>(() =>
                 StateMachine<Invoice, InvoiceStatus>.IsInFinalState(invoice!));
         }
 
@@ -1014,7 +1032,7 @@
 
             var invalidType = (StateMachine<Invoice, InvoiceStatus>.DiagramType)999;
 
-            Assert.ThrowsException<ArgumentException>(() =>
+            Assert.ThrowsExactly<ArgumentException>(() =>
                 StateMachine<Invoice, InvoiceStatus>.GenerateDiagram(invalidType));
         }
 
@@ -1196,31 +1214,35 @@
         }
 
         [TestMethod]
-        [ExpectedException(typeof(InvalidOperationException))]
         public void OnEntry_DuplicateRegistration_ThrowsInvalidOperationException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                invoice => invoice.Status,
-                builder =>
-                {
-                    builder.SetInitialState(InvoiceStatus.Draft);
-                    builder.OnEntry(InvoiceStatus.Sent, _ => { });
-                    builder.OnEntry(InvoiceStatus.Sent, _ => { }); // Duplicate
-                });
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    invoice => invoice.Status,
+                    builder =>
+                    {
+                        builder.SetInitialState(InvoiceStatus.Draft);
+                        builder.OnEntry(InvoiceStatus.Sent, _ => { });
+                        builder.OnEntry(InvoiceStatus.Sent, _ => { }); // Duplicate
+                    });
+            });
         }
 
         [TestMethod]
-        [ExpectedException(typeof(InvalidOperationException))]
         public void OnExit_DuplicateRegistration_ThrowsInvalidOperationException()
         {
-            StateMachine<Invoice, InvoiceStatus>.Configure(
-                invoice => invoice.Status,
-                builder =>
-                {
-                    builder.SetInitialState(InvoiceStatus.Draft);
-                    builder.OnExit(InvoiceStatus.Draft, _ => { });
-                    builder.OnExit(InvoiceStatus.Draft, _ => { }); // Duplicate
-                });
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+            {
+                StateMachine<Invoice, InvoiceStatus>.Configure(
+                    invoice => invoice.Status,
+                    builder =>
+                    {
+                        builder.SetInitialState(InvoiceStatus.Draft);
+                        builder.OnExit(InvoiceStatus.Draft, _ => { });
+                        builder.OnExit(InvoiceStatus.Draft, _ => { }); // Duplicate
+                    });
+            });
         }
 
         #endregion
